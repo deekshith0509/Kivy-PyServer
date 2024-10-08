@@ -38,8 +38,8 @@ jobs:
           mkdir -p $HOME/Android/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-6609375_latest.zip
           unzip commandlinetools-linux-6609375_latest.zip -d $HOME/Android/cmdline-tools/
-          
-          # Check extracted content and move to correct location
+
+          # Move the extracted tools to the correct directory
           if [ -d "$HOME/Android/cmdline-tools/cmdline-tools" ]; then
               mv $HOME/Android/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           elif [ -d "$HOME/Android/cmdline-tools/tools" ]; then
@@ -50,12 +50,14 @@ jobs:
           fi
 
           # Accept licenses and update SDK
+          echo "Accepting Android SDK licenses..."
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || echo "Failed to accept licenses"
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --update
 
       # Step 5: Install specific Android SDK components
       - name: Install specific Android SDK components
         run: |
+          echo "Installing required Android SDK components..."
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
           echo "Installed SDK components:"
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list
@@ -89,7 +91,7 @@ jobs:
       - name: Build APK
         run: |
           echo "Building APK..."
-          buildozer -v android debug
+          buildozer -v android debug || { echo "Build failed, checking for license issues..."; yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses; }
           for i in {1..3}; do
             buildozer -v android debug && break || sleep 10
           done
