@@ -3,10 +3,10 @@ name: Build Android APK
 on:
   push:
     branches:
-      - main  # Adjust this branch as necessary
+      - main
   pull_request:
     branches:
-      - main  # Adjust this branch as necessary
+      - main
 
 jobs:
   build:
@@ -15,7 +15,7 @@ jobs:
     steps:
       # Step 1: Checkout the repository
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3  # Updated to v3
 
       # Step 2: Get the current date for caching
       - name: Get Date
@@ -24,14 +24,14 @@ jobs:
 
       # Step 3: Cache Buildozer global directory
       - name: Cache Buildozer global directory
-        uses: actions/cache@v2
+        uses: actions/cache@v3  # Updated to v3
         with:
           path: ~/.buildozer
           key: buildozer-global-${{ hashFiles('buildozer.spec') }}
 
       # Step 4: Cache Buildozer dependencies
       - name: Cache Buildozer dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v3  # Updated to v3
         with:
           path: |
             ~/.buildozer/android/platform
@@ -51,7 +51,17 @@ jobs:
           sdkmanager "build-tools;30.0.3"  # Replace with your desired version
           yes | sdkmanager --licenses
 
-      # Step 7: Build the APK using Buildozer
+      # Step 7: Check Buildozer installation
+      - name: Check Buildozer Installation
+        run: buildozer --version
+
+      # Step 8: Verify Android SDK installation
+      - name: Verify Android SDK Installation
+        run: |
+          echo "Android SDK Path: $ANDROID_HOME"
+          ls $ANDROID_HOME/build-tools/
+
+      # Step 9: Build the APK using Buildozer
       - name: Build APK
         run: |
           buildozer -v android debug
@@ -59,7 +69,7 @@ jobs:
             buildozer -v android debug && break || sleep 10
           done
 
-      # Step 8: Upload APK artifacts
+      # Step 10: Upload APK artifacts
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
