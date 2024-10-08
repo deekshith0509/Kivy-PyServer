@@ -41,32 +41,42 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip python3-setuptools openjdk-11-jdk
-          pip install --upgrade pip
-          pip install cython buildozer python-for-android
+          sudo apt-get install -y python3 python3-pip python3-setuptools openjdk-11-jdk wget unzip
 
-      # Step 6: Install Android SDK Build Tools and accept licenses
+      # Step 6: Install Android SDK Command-Line Tools
+      - name: Install Android SDK Command-Line Tools
+        run: |
+          echo "Installing Android SDK Command-Line Tools"
+          mkdir -p $HOME/Android/Sdk
+          wget https://dl.google.com/android/repository/commandlinetools-linux-6609375_latest.zip -O cmdline-tools.zip
+          unzip cmdline-tools.zip -d $HOME/Android/Sdk/cmdline-tools
+          rm cmdline-tools.zip
+          echo "export ANDROID_HOME=$HOME/Android/Sdk" >> $GITHUB_ENV
+          echo "export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
+          echo "export PATH=$PATH:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
+
+      # Step 7: Accept SDK licenses and install Build Tools
       - name: Install Android SDK Build Tools
         run: |
           echo "Installing Android SDK Build Tools"
           yes | sdkmanager --licenses
           sdkmanager "build-tools;30.0.3"  # Change this to the version you need
 
-      # Step 7: Check Buildozer installation
+      # Step 8: Check Buildozer installation
       - name: Check Buildozer Installation
         run: buildozer --version
 
-      # Step 8: Verify Android SDK installation
+      # Step 9: Verify Android SDK installation
       - name: Verify Android SDK Installation
         run: |
           echo "Android SDK Path: $ANDROID_HOME"
           ls $ANDROID_HOME/build-tools/
 
-      # Step 9: Check Java installation
+      # Step 10: Check Java installation
       - name: Check Java Installation
         run: java -version
 
-      # Step 10: Build the APK using Buildozer
+      # Step 11: Build the APK using Buildozer
       - name: Build APK
         run: |
           echo "Building APK..."
@@ -75,7 +85,7 @@ jobs:
             buildozer -v android debug && break || sleep 10
           done
 
-      # Step 11: Upload APK artifacts
+      # Step 12: Upload APK artifacts
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
