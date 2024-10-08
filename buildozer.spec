@@ -18,7 +18,9 @@ android.presplash_color = #FFFFFF
 debug = 1
 
 # (str) Android NDK version
-android.ndk = r25b
+# (str) Android NDK version
+android.ndk = 25b  # Use the version you prefer
+
 
 # (str) Android SDK path (commented out to let Buildozer install it)
 # android.sdk_path = ~/.buildozer/android/platform/android-sdk
