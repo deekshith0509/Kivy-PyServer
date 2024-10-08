@@ -1,5 +1,4 @@
 name: Build Android APK
-
 on:
   push:
     branches:
@@ -7,29 +6,37 @@ on:
   pull_request:
     branches:
       - main
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Get the current date for caching
-      - name: Get Date
-        id: get-date
-        run: echo "date=$(date -u +%Y%m%d)" >> $GITHUB_ENV
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-      # Step 3: Cache Buildozer global directory
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip openjdk-11-jdk
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade pip
+          pip install buildozer
+
       - name: Cache Buildozer global directory
         uses: actions/cache@v3
         with:
           path: ~/.buildozer
           key: buildozer-global-${{ hashFiles('buildozer.spec') }}
 
-      # Step 4: Cache Buildozer dependencies
       - name: Cache Buildozer dependencies
         uses: actions/cache@v3
         with:
@@ -37,55 +44,19 @@ jobs:
             ~/.buildozer/android/platform
           key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('buildozer.spec') }}
 
-      # Step 5: Install system dependencies
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3 python3-pip python3-setuptools openjdk-11-jdk wget unzip
+      - name: Accept SDK licenses
+        run: yes | sdkmanager --licenses
 
-      # Step 6: Install Android SDK Command-Line Tools
-      - name: Install Android SDK Command-Line Tools
-        run: |
-          echo "Installing Android SDK Command-Line Tools"
-          mkdir -p $HOME/Android/Sdk
-          wget https://dl.google.com/android/repository/commandlinetools-linux-6609375_latest.zip -O cmdline-tools.zip
-          unzip cmdline-tools.zip -d $HOME/Android/Sdk/cmdline-tools
-          rm cmdline-tools.zip
-          echo "export ANDROID_HOME=$HOME/Android/Sdk" >> $GITHUB_ENV
-          echo "export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
-          echo "export PATH=$PATH:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
+      - name: Install Build Tools
+        run: sdkmanager "build-tools;30.0.3"
 
-      # Step 7: Accept SDK licenses and install Build Tools
-      - name: Install Android SDK Build Tools
-        run: |
-          echo "Installing Android SDK Build Tools"
-          yes | sdkmanager --licenses
-          sdkmanager "build-tools;30.0.3"  # Change this to the version you need
-
-      # Step 8: Check Buildozer installation
-      - name: Check Buildozer Installation
-        run: buildozer --version
-
-      # Step 9: Verify Android SDK installation
-      - name: Verify Android SDK Installation
-        run: |
-          echo "Android SDK Path: $ANDROID_HOME"
-          ls $ANDROID_HOME/build-tools/
-
-      # Step 10: Check Java installation
-      - name: Check Java Installation
-        run: java -version
-
-      # Step 11: Build the APK using Buildozer
       - name: Build APK
         run: |
-          echo "Building APK..."
           buildozer -v android debug
           for i in {1..3}; do
             buildozer -v android debug && break || sleep 10
           done
 
-      # Step 12: Upload APK artifacts
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
