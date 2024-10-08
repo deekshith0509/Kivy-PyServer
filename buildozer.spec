@@ -13,7 +13,6 @@ version = 0.1
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 android.release_artifact = apk
 android.presplash_color = #FFFFFF
-p4a.source_dir = /mnt/c/Users/deeks/desktop/tools/softwares/python-for-android
 
 # (bool) Use --debug to enable debug mode
 debug = 1
@@ -21,8 +20,11 @@ debug = 1
 # (str) Android NDK version
 android.ndk = r25b
 
-# (str) Android SDK path
-android.sdk_path = ~/.buildozer/android/platform/android-sdk
+# (str) Android SDK path (commented out to let Buildozer install it)
+# android.sdk_path = ~/.buildozer/android/platform/android-sdk
 
-# (str) Android NDK path
-android.ndk_path = ~/.buildozer/android/platform/android-ndk-r25b
+# (str) Android NDK path (commented out to let Buildozer install it)
+# android.ndk_path = ~/.buildozer/android/platform/android-ndk-r25b
+
+# Uncomment this line only if you have a specific source directory for p4a
+# p4a.source_dir =
