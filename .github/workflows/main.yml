@@ -35,19 +35,19 @@ jobs:
       # Step 4: Setup Android SDK manually to handle licenses
       - name: Setup Android SDK
         run: |
+          mkdir -p $HOME/Android/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-6609375_latest.zip
-          unzip commandlinetools-linux-6609375_latest.zip -d $HOME/Android/cmdline-tools
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          mv $HOME/Android/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-          yes | sdkmanager --licenses || echo "Failed to accept licenses"
-          sdkmanager --update
+          unzip commandlinetools-linux-6609375_latest.zip -d $HOME/Android/cmdline-tools/
+          mv $HOME/Android/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || echo "Failed to accept licenses"
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --update
 
       # Step 5: Install specific Android SDK components
       - name: Install specific Android SDK components
         run: |
-          sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
           echo "Installed SDK components:"
-          sdkmanager --list
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list
 
       # Step 6: Install Python dependencies
       - name: Install Python dependencies
@@ -59,7 +59,7 @@ jobs:
       - name: Set up environment variables
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/Android" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/30.0.3:$ANDROID_NDK_HOME:$PATH" >> $GITHUB_ENV
 
