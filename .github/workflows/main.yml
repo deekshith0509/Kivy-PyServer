@@ -32,13 +32,24 @@ jobs:
               libssl-dev libreadline-dev libffi-dev libsqlite3-dev \
               libbz2-dev
 
-      # Step 4: Setup Android SDK manually to handle licenses
+      # Step 4: Setup Android SDK
       - name: Setup Android SDK
         run: |
           mkdir -p $HOME/Android/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-6609375_latest.zip
           unzip commandlinetools-linux-6609375_latest.zip -d $HOME/Android/cmdline-tools/
-          mv $HOME/Android/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          
+          # Check extracted content and move to correct location
+          if [ -d "$HOME/Android/cmdline-tools/cmdline-tools" ]; then
+              mv $HOME/Android/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          elif [ -d "$HOME/Android/cmdline-tools/tools" ]; then
+              mv $HOME/Android/cmdline-tools/tools $ANDROID_HOME/cmdline-tools/latest
+          else
+              echo "No cmdline-tools directory found. Check the extraction output."
+              exit 1
+          fi
+
+          # Accept licenses and update SDK
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || echo "Failed to accept licenses"
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --update
 
