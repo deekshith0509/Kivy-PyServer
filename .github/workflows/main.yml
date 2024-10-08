@@ -42,14 +42,15 @@ jobs:
       # Step 6: Accept Android SDK licenses
       - name: Accept Android SDK licenses
         run: |
-          yes | sdkmanager --licenses
           mkdir -p $ANDROID_HOME/licenses
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $ANDROID_HOME/licenses/android-sdk-license
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $ANDROID_HOME/licenses/android-sdk-license
+          echo "android-sdk-license" | sudo tee $ANDROID_HOME/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" | sudo tee -a $ANDROID_HOME/licenses/android-sdk-license
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" | sudo tee -a $ANDROID_HOME/licenses/android-sdk-license
 
       # Step 7: Install specific Android SDK components
       - name: Install specific Android SDK components
         run: |
+          sdkmanager --update
           sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
           echo "Installed SDK components:"
           sdkmanager --list
@@ -59,7 +60,7 @@ jobs:
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/21.4.7075529" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/30.0.3:$ANDROID_NDK_HOME:$PATH" >> $GITHUB_ENV
 
       # Step 9: Verify Android SDK and NDK setup
