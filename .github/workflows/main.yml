@@ -50,6 +50,23 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/30.0.3:$PATH" >> $GITHUB_ENV
 
+      - name: Locate and link Aidl
+        run: |
+          AIDL_PATH=$(find $ANDROID_HOME -name aidl | grep build-tools | head -n 1)
+          if [ -n "$AIDL_PATH" ]; then
+            echo "Aidl found at: $AIDL_PATH"
+            sudo ln -s $AIDL_PATH /usr/local/bin/aidl
+            echo "Aidl linked to /usr/local/bin/aidl"
+          else
+            echo "Aidl not found in Android SDK"
+            exit 1
+          fi
+
+      - name: Verify Aidl installation
+        run: |
+          which aidl
+          aidl --version
+
       - name: Cache Buildozer global directory
         uses: actions/cache@v3
         with:
@@ -62,20 +79,6 @@ jobs:
           path: |
             ~/.buildozer/android/platform
           key: ${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('**/*.py') }}
-
-      - name: Verify Android SDK installation
-        run: |
-          echo "Android SDK Root: $ANDROID_HOME"
-          echo "Contents of $ANDROID_HOME:"
-          ls -R $ANDROID_HOME
-          echo "Build Tools:"
-          ls $ANDROID_HOME/build-tools || echo "Build Tools not found"
-          echo "Platform Tools:"
-          ls $ANDROID_HOME/platform-tools || echo "Platform Tools not found"
-          echo "NDK:"
-          ls $ANDROID_HOME/ndk || echo "NDK not found"
-          echo "Aidl location:"
-          which aidl || echo "Aidl not found in PATH"
 
       - name: Build APK
         run: |
