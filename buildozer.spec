@@ -19,7 +19,7 @@ debug = 1
 
 # (str) Android NDK version
 # (str) Android NDK version
-android.ndk = 25b  # Use the version you prefer
+#android.ndk = 25b  # Use the version you prefer
 
 
 # (str) Android SDK path (commented out to let Buildozer install it)
