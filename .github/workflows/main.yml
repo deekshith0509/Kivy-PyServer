@@ -31,16 +31,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install cython buildozer
 
-      - name: Install Android SDK components
+      - name: Accept Android SDK licenses
         run: |
-          sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk-bundle" "platform-tools"
           yes | sdkmanager --licenses
+          mkdir -p $ANDROID_HOME/licenses
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $ANDROID_HOME/licenses/android-sdk-license
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $ANDROID_HOME/licenses/android-sdk-license
+
+      - name: Install specific Android SDK components
+        run: |
+          sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
+          echo "Installed SDK components:"
+          sdkmanager --list
 
       - name: Set up environment variables
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "PATH=$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$PATH" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/30.0.3:$PATH" >> $GITHUB_ENV
 
       - name: Cache Buildozer global directory
         uses: actions/cache@v3
@@ -57,6 +65,8 @@ jobs:
 
       - name: Verify Android SDK installation
         run: |
+          echo "Android SDK Root: $ANDROID_HOME"
+          echo "Contents of $ANDROID_HOME:"
           ls -R $ANDROID_HOME
           echo "Build Tools:"
           ls $ANDROID_HOME/build-tools || echo "Build Tools not found"
@@ -64,6 +74,8 @@ jobs:
           ls $ANDROID_HOME/platform-tools || echo "Platform Tools not found"
           echo "NDK:"
           ls $ANDROID_HOME/ndk || echo "NDK not found"
+          echo "Aidl location:"
+          which aidl || echo "Aidl not found in PATH"
 
       - name: Build APK
         run: |
