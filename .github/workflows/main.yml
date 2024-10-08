@@ -43,6 +43,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-pip python3-setuptools
+          pip install Cython  # Install Cython
 
       # Step 6: Install Buildozer and Python-for-Android
       - name: Install Buildozer
