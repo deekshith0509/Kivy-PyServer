@@ -31,11 +31,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install cython buildozer
 
+      - name: Install Android SDK components
+        run: |
+          sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk-bundle" "platform-tools"
+          yes | sdkmanager --licenses
+
+      - name: Set up environment variables
+        run: |
+          echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$PATH" >> $GITHUB_ENV
+
       - name: Cache Buildozer global directory
         uses: actions/cache@v3
         with:
           path: ~/.buildozer
-          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-global-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('**/*.py') }}
 
       - name: Cache Buildozer dependencies
         uses: actions/cache@v3
@@ -44,20 +55,15 @@ jobs:
             ~/.buildozer/android/platform
           key: ${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('**/*.py') }}
 
-      - name: Accept SDK licenses
-        run: yes | sdkmanager --licenses
-
-      - name: Install Build Tools
-        run: sdkmanager "build-tools;30.0.3"
-
-      - name: Install NDK
-        run: sdkmanager "ndk-bundle"
-
-      - name: Set up environment variables
+      - name: Verify Android SDK installation
         run: |
-          echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "PATH=$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$PATH" >> $GITHUB_ENV
+          ls -R $ANDROID_HOME
+          echo "Build Tools:"
+          ls $ANDROID_HOME/build-tools || echo "Build Tools not found"
+          echo "Platform Tools:"
+          ls $ANDROID_HOME/platform-tools || echo "Platform Tools not found"
+          echo "NDK:"
+          ls $ANDROID_HOME/ndk || echo "NDK not found"
 
       - name: Build APK
         run: |
