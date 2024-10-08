@@ -45,7 +45,13 @@ jobs:
           pip install --upgrade pip
           pip install cython buildozer python-for-android
 
-      # Step 6: Build the APK using Buildozer
+      # Step 6: Install Android SDK Build Tools and accept licenses
+      - name: Install Android SDK Build Tools
+        run: |
+          sdkmanager "build-tools;30.0.3"  # Replace with your desired version
+          yes | sdkmanager --licenses
+
+      # Step 7: Build the APK using Buildozer
       - name: Build APK
         run: |
           buildozer -v android debug
@@ -53,7 +59,7 @@ jobs:
             buildozer -v android debug && break || sleep 10
           done
 
-      # Step 7: Upload APK artifacts
+      # Step 8: Upload APK artifacts
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
