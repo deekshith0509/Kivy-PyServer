@@ -101,12 +101,7 @@ jobs:
           echo "Testing AIDL command:"
           aidl --help || echo "Failed to run aidl command"
 
-      # Step 12: Regenerate configure script
-      - name: Regenerate configure script
-        run: |
-          autoreconf -fi
-
-      # Step 13: Build the APK using Buildozer
+      # Step 12: Build the APK using Buildozer
       - name: Build APK
         run: |
           echo "Building APK..."
@@ -114,7 +109,7 @@ jobs:
               echo y | buildozer -v android debug && break || sleep 10
           done
 
-      # Step 14: Upload APK artifacts
+      # Step 13: Upload APK artifacts
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
