@@ -25,6 +25,7 @@ jobs:
 
       # Step 3: Set up JDK
       - name: Set up JDK
+        id: setup-jdk
         uses: actions/setup-java@v3
         with:
           java-version: '17'
@@ -85,7 +86,7 @@ jobs:
       # Step 10: Set up environment variables
       - name: Set up environment variables
         run: |
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "JAVA_HOME=${{ steps.setup-jdk.outputs.java-home }}" >> $GITHUB_ENV
           echo "ANDROID_HOME=$HOME/Android" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$HOME/Android/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "PATH=$HOME/Android/cmdline-tools/latest/bin:$HOME/Android/platform-tools:$HOME/Android/build-tools/30.0.3:$HOME/Android/ndk/21.4.7075529:$PATH" >> $GITHUB_ENV
