@@ -111,7 +111,7 @@ jobs:
         run: |
           echo "Building APK..."
           for i in {1..3}; do
-              buildozer -v android debug && break || sleep 10
+              echo y | buildozer -v android debug && break || sleep 10
           done
 
       # Step 13: Upload APK artifacts
