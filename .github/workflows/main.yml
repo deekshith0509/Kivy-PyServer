@@ -47,6 +47,15 @@ jobs:
         pip install --upgrade Cython==${{ env.CYTHON_VERSION }} || true
         pip install --upgrade buildozer==${{ env.BUILDOZER_VERSION }} || true
 
+    - name: Check Buildozer installation
+      run: |
+        if command -v buildozer; then
+          echo "Buildozer installed successfully."
+          buildozer --version
+        else
+          echo "Buildozer is not installed." && exit 1
+        fi
+
     - name: Prepare Buildozer configuration
       run: |
         if [ ! -f buildozer.spec ]; then
@@ -82,15 +91,6 @@ jobs:
         path: |
           ~/.buildozer/android/platform/build-*/dists/*/log/*.log
           ~/.buildozer/android/platform/build-*/dists/*/log/*.txt
-
-    - name: Buildozer version check
-      if: failure()
-      run: |
-        if command -v buildozer; then
-          buildozer --version
-        else
-          echo "Buildozer is not installed."
-        fi
 
     - name: Python environment info
       if: failure()
