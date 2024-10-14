@@ -69,6 +69,7 @@ jobs:
           pip install cython buildozer
 
       # Step 8: Set up environment variables
+      - name: Set up environment variables
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
           echo "ANDROID_HOME=$HOME/Android" >> $GITHUB_ENV
