@@ -77,13 +77,25 @@ jobs:
           echo "Installed SDK components:"
           $HOME/Android/cmdline-tools/latest/bin/sdkmanager --list
 
-      # Step 9: Install Python dependencies
+      # Step 9: Cache Python dependencies and Buildozer
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/buildozer
+            ~/.buildozer
+            ~/.local
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
+      # Step 10: Install Python dependencies
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install cython buildozer
+          pip install cython buildozer python-for-android
 
-      # Step 10: Set up environment variables
+      # Step 11: Set up environment variables
       - name: Set up environment variables
         run: |
           echo "JAVA_HOME=${{ steps.setup-jdk.outputs.java-home }}" >> $GITHUB_ENV
@@ -91,7 +103,7 @@ jobs:
           echo "ANDROID_NDK_HOME=$HOME/Android/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "PATH=$HOME/Android/cmdline-tools/latest/bin:$HOME/Android/platform-tools:$HOME/Android/build-tools/30.0.3:$HOME/Android/ndk/21.4.7075529:$PATH" >> $GITHUB_ENV
 
-      # Step 11: Verify Android SDK and NDK setup
+      # Step 12: Verify Android SDK and NDK setup
       - name: Verify Android SDK and NDK setup
         run: |
           echo "Android SDK Root: $ANDROID_HOME"
@@ -102,7 +114,7 @@ jobs:
           echo "Testing AIDL command:"
           aidl --help || echo "Failed to run aidl command"
 
-      # Step 12: Build the APK using Buildozer
+      # Step 13: Build the APK using Buildozer
       - name: Build APK
         run: |
           echo "Building APK..."
@@ -110,7 +122,7 @@ jobs:
               echo y | buildozer -v android debug && break || sleep 10
           done
 
-      # Step 13: Upload APK artifacts
+      # Step 14: Upload APK artifacts
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
