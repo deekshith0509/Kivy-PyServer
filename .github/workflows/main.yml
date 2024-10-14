@@ -42,47 +42,31 @@ jobs:
       # Step 5: Setup Android SDK
       - name: Setup Android SDK
         run: |
-          mkdir -p $HOME/Android/cmdline-tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-6609375_latest.zip
-          unzip commandlinetools-linux-6609375_latest.zip -d $HOME/Android/cmdline-tools/
+          wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip
+          unzip commandlinetools-linux-8512546_latest.zip -d $HOME/android-sdk
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
 
-          # Move to the correct location
-          if [ -d "$HOME/Android/cmdline-tools/cmdline-tools" ]; then
-              mv $HOME/Android/cmdline-tools/cmdline-tools $HOME/Android/cmdline-tools/latest
-          elif [ -d "$HOME/Android/cmdline-tools/tools" ]; then
-              mv $HOME/Android/cmdline-tools/tools $HOME/Android/cmdline-tools/latest
-          else
-              echo "No cmdline-tools directory found. Check the extraction output."
-              exit 1
-          fi
-
-      # Step 6: Accept Android SDK Licenses
-      - name: Accept Android SDK Licenses
+      # Step 6: Install Android SDK components
+      - name: Install Android SDK components
         run: |
-          yes | $HOME/Android/cmdline-tools/latest/bin/sdkmanager --licenses
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529"
 
-      # Step 7: Install specific Android SDK components
-      - name: Install specific Android SDK components
-        run: |
-          $HOME/Android/cmdline-tools/latest/bin/sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
-          echo "Installed SDK components:"
-          $HOME/Android/cmdline-tools/latest/bin/sdkmanager --list
-
-      # Step 8: Install Python dependencies
+      # Step 7: Install Python dependencies
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install cython buildozer
 
-      # Step 9: Set up environment variables
+      # Step 8: Set up environment variables
       - name: Set up environment variables
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-          echo "ANDROID_HOME=$HOME/Android" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$HOME/Android/ndk/21.4.7075529" >> $GITHUB_ENV
-          echo "PATH=$HOME/Android/cmdline-tools/latest/bin:$HOME/Android/platform-tools:$HOME/Android/build-tools/30.0.3:$HOME/Android/ndk/21.4.7075529:$PATH" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
 
-      # Step 10: Verify Android SDK and NDK setup
+      # Step 9: Verify Android SDK and NDK setup
       - name: Verify Android SDK and NDK setup
         run: |
           echo "Android SDK Root: $ANDROID_HOME"
@@ -93,7 +77,7 @@ jobs:
           echo "AIDL version:"
           aidl --version || echo "Failed to get aidl version"
 
-      # Step 11: Build the APK using Buildozer
+      # Step 10: Build the APK using Buildozer
       - name: Build APK
         run: |
           echo "Building APK..."
@@ -102,7 +86,7 @@ jobs:
             buildozer -v android debug && break || sleep 10
           done
 
-      # Step 12: Upload APK artifacts
+      # Step 11: Upload APK artifacts
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
