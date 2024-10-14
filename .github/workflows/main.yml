@@ -52,8 +52,13 @@ jobs:
           cd $HOME/Android
           wget -q https://dl.google.com/android/repository/sdk-tools-linux-3859397.zip
           unzip sdk-tools-linux-3859397.zip -d $HOME/Android
-          yes | sdkmanager --sdk_root=$HOME/Android --licenses
-          sdkmanager --sdk_root=$HOME/Android "platform-tools" "platforms;android-31" "build-tools;30.0.3"
+          # Add Android SDK tools to PATH
+          echo "$HOME/Android/tools/bin" >> $GITHUB_ENV
+          echo "$HOME/Android/platform-tools" >> $GITHUB_ENV
+          echo "$HOME/Android/tools" >> $GITHUB_ENV
+          echo "yes | $HOME/Android/tools/bin/sdkmanager --licenses"
+          $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android --licenses
+          $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android "platform-tools" "platforms;android-31" "build-tools;30.0.3"
 
       - name: Install Android NDK
         run: |
