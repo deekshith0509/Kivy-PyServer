@@ -53,7 +53,7 @@ jobs:
       # Step 5: Accept Android SDK Licenses
       - name: Accept Android SDK Licenses
         run: |
-          curl -s https://gist.githubusercontent.com/YOUR_USERNAME/YOUR_GIST_ID/raw/android-sdk-license.sh | bash
+          curl -s https://gist.github.com/deekshith0509/cff9329f84c3b46d8206032d93b1358a#file-android-sdk-license-sh | bash
 
       # Step 6: Install specific Android SDK components
       - name: Install specific Android SDK components
