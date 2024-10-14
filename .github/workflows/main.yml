@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     env:
       BUILDOZER_VERSION: stable
       CYTHON_VERSION: 0.29.33
@@ -47,13 +47,21 @@ jobs:
         pip install --upgrade Cython==${{ env.CYTHON_VERSION }} || true
         pip install --upgrade buildozer==${{ env.BUILDOZER_VERSION }} || true
 
-    - name: Check Buildozer installation
+    - name: Verify Buildozer Installation
       run: |
+        echo "Verifying Buildozer installation..."
         if command -v buildozer; then
-          echo "Buildozer installed successfully."
+          echo "Buildozer is installed."
           buildozer --version
         else
-          echo "Buildozer is not installed." && exit 1
+          echo "Buildozer is not installed. Attempting reinstallation..."
+          pip install --upgrade buildozer==${{ env.BUILDOZER_VERSION }}
+          if command -v buildozer; then
+            echo "Buildozer installed successfully after reinstallation."
+            buildozer --version
+          else
+            echo "Failed to install Buildozer." && exit 1
+          fi
         fi
 
     - name: Prepare Buildozer configuration
