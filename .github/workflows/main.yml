@@ -103,8 +103,8 @@ jobs:
           echo "PATH: $PATH"
           echo "AIDL location:"
           which aidl || echo "aidl not found in PATH"
-          echo "AIDL version:"
-          aidl --version || echo "Failed to get aidl version"
+          echo "Testing AIDL command:"
+          aidl --help || echo "Failed to run aidl command"
 
       # Step 12: Build the APK using Buildozer
       - name: Build APK
