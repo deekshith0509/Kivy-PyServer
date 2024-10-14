@@ -44,7 +44,7 @@ jobs:
           libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev || true
         pip install --upgrade pip setuptools wheel || true
         pip install --upgrade Cython==${{ env.CYTHON_VERSION }} || true
-        pip install --upgrade buildozer || true  # Install without specifying version
+        pip install --upgrade buildozer || true
 
     - name: Verify Buildozer Installation
       run: |
@@ -54,7 +54,7 @@ jobs:
           buildozer --version
         else
           echo "Buildozer is not installed. Attempting reinstallation..."
-          pip install --upgrade buildozer || true  # Attempt reinstall without version
+          pip install --upgrade buildozer || true
           if command -v buildozer; then
             echo "Buildozer installed successfully after reinstallation."
             buildozer --version
@@ -67,15 +67,25 @@ jobs:
       run: |
         if [ ! -f buildozer.spec ]; then
           echo "Creating default buildozer.spec"
-          buildozer init
+          buildozer init  # Create a new buildozer.spec if it does not exist
         fi
-        sed -i 's/^android.ndk =.*/android.ndk = ${{ env.ANDROID_NDK_VERSION }}/' buildozer.spec
-        sed -i 's/^requirements =.*/requirements = python3,kivy==2.1.0,qrcode,plyer,kivymd,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi==${{ env.LIBFFI_VERSION }}/' buildozer.spec
-        echo "log_level = 2" >> buildozer.spec
+        # Ensure buildozer.spec is populated correctly
+        if ! grep -q "\[buildozer\]" buildozer.spec; then
+          echo "[buildozer]" >> buildozer.spec
+          echo "log_level = 2" >> buildozer.spec
+        fi
+        # Update specific configurations
+        sed -i 's/^android.ndk =.*/android.ndk = ${{ env.ANDROID_NDK_VERSION }}/' buildozer.spec || true
+        sed -i 's/^requirements =.*/requirements = python3,kivy==2.1.0,qrcode,plyer,kivymd,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi==${{ env.LIBFFI_VERSION }}/' buildozer.spec || true
+
+    - name: Ensure necessary directories exist
+      run: |
+        mkdir -p ~/.buildozer/android/platform || true
+        mkdir -p ~/.buildozer/android/platform/python-for-android || true
 
     - name: Clean Buildozer cache
       run: |
-        rm -rf ~/.buildozer/android/platform
+        rm -rf ~/.buildozer/android/platform || true
         buildozer android clean || true
 
     - name: Build APK
