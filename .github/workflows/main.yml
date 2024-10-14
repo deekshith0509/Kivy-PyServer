@@ -15,17 +15,17 @@ jobs:
     steps:
       # Step 1: Checkout repository
       - name: Checkout repository
-        uses: actions/checkout@v3  # Updated to latest version
+        uses: actions/checkout@v3
 
       # Step 2: Set up Python 3.11
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5  # Updated to latest version
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       # Step 3: Set up JDK
       - name: Set up JDK
-        uses: actions/setup-java@v3  # Updated to latest version
+        uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'adopt'
@@ -34,11 +34,14 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:deadsnakes/ppa -y
+          sudo apt-get update
           sudo apt-get install -y wget unzip openjdk-17-jdk build-essential \
               zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
               libssl-dev libreadline-dev libffi-dev libsqlite3-dev \
-              libbz2-dev python3-dev python3-pip python3-setuptools \
-              python3-wheel python3-distutils
+              libbz2-dev python3.11 python3.11-distutils python3-pip python3-setuptools \
+              python3-wheel
 
       # Step 5: Setup Android SDK
       - name: Setup Android SDK
