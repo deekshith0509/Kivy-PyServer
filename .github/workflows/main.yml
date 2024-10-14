@@ -83,6 +83,11 @@ jobs:
         mkdir -p ~/.buildozer/android/platform || true
         mkdir -p ~/.buildozer/android/platform/python-for-android || true
 
+    - name: Accept Android SDK Licenses
+      run: |
+        echo "Accepting Android SDK licenses..."
+        yes | sdkmanager --licenses || true
+
     - name: Clean Buildozer cache
       run: |
         rm -rf ~/.buildozer/android/platform || true
