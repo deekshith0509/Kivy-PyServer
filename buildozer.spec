@@ -7,7 +7,7 @@ source.main = main.py
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 orientation = portrait
-requirements = python3,kivy==2.1.0,qrcode,plyer,kivymd,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,webbrowser,socketserver,http-server,urllib3,requests,pyjnius,setuptools,os,socket,platform,subprocess,threading,http,datetime,io,six,openssl
+requirements = python3, kivy==2.1.0, qrcode, plyer, kivymd, materialyoucolor, exceptiongroup, asyncgui, asynckivy, Pillow, urllib3, requests, pyjnius, setuptools
 fullscreen = 0
 version = 0.1
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
