@@ -41,7 +41,7 @@ jobs:
               zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
               libssl-dev libreadline-dev libffi-dev libsqlite3-dev \
               libbz2-dev python3.11 python3.11-distutils python3-pip python3-setuptools \
-              python3-wheel
+              python3-wheel libtool automake autoconf
 
       # Step 5: Setup Android SDK
       - name: Setup Android SDK
