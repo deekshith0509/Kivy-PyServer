@@ -31,7 +31,7 @@ jobs:
           sudo apt-get install -y wget unzip openjdk-17-jdk build-essential \
               zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
               libssl-dev libreadline-dev libffi-dev libsqlite3-dev \
-              libbz2-dev python3-venv python3-setuptools
+              libbz2-dev python3-venv
 
       # Step 4: Setup Android SDK
       - name: Setup Android SDK
@@ -53,12 +53,12 @@ jobs:
       # Step 5: Accept Android SDK Licenses
       - name: Accept Android SDK Licenses
         run: |
-          curl -s https://gist.githubusercontent.com/deekshith0509/cff9329f84c3b46d8206032d93b1358a/raw/22fd19da93f65255d05658c118b4a8969a47d5fc/android-sdk-license.sh | bash
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
       # Step 6: Install specific Android SDK components
       - name: Install specific Android SDK components
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
           echo "Installed SDK components:"
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list
 
@@ -73,7 +73,7 @@ jobs:
         run: |
           source venv/bin/activate
           python -m pip install --upgrade pip
-          pip install setuptools cython buildozer
+          pip install cython buildozer
 
       # Step 9: Set up environment variables
       - name: Set up environment variables
