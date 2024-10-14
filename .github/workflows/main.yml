@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILDOZER_VERSION: stable
       CYTHON_VERSION: 0.29.33
       LIBFFI_VERSION: 3.4.2
       ANDROID_NDK_VERSION: 25b
@@ -36,7 +35,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.buildozer
-        key: ${{ runner.os }}-buildozer-global-${{ env.BUILDOZER_VERSION }}
+        key: ${{ runner.os }}-buildozer-global
 
     - name: Install dependencies
       run: |
@@ -45,7 +44,7 @@ jobs:
           libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev || true
         pip install --upgrade pip setuptools wheel || true
         pip install --upgrade Cython==${{ env.CYTHON_VERSION }} || true
-        pip install --upgrade buildozer==${{ env.BUILDOZER_VERSION }} || true
+        pip install --upgrade buildozer || true  # Install without specifying version
 
     - name: Verify Buildozer Installation
       run: |
@@ -55,7 +54,7 @@ jobs:
           buildozer --version
         else
           echo "Buildozer is not installed. Attempting reinstallation..."
-          pip install --upgrade buildozer==${{ env.BUILDOZER_VERSION }}
+          pip install --upgrade buildozer || true  # Attempt reinstall without version
           if command -v buildozer; then
             echo "Buildozer installed successfully after reinstallation."
             buildozer --version
