@@ -34,13 +34,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository ppa:deadsnakes/ppa -y
-          sudo apt-get update
-          sudo apt-get install -y wget unzip openjdk-17-jdk build-essential \
-              zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
-              libssl-dev libreadline-dev libffi-dev libsqlite3-dev \
-              libbz2-dev python3.11 python3.11-distutils python3-pip python3-setuptools \
+          sudo apt-get install -y wget unzip build-essential zlib1g-dev \
+              libncurses5-dev libgdbm-dev libnss3-dev libssl-dev \
+              libreadline-dev libffi-dev libsqlite3-dev libbz2-dev \
+              python3.11 python3.11-distutils python3-pip python3-setuptools \
               python3-wheel libtool automake autoconf
 
       # Step 5: Setup Android SDK
@@ -49,45 +46,25 @@ jobs:
           mkdir -p $HOME/Android/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-6609375_latest.zip
           unzip commandlinetools-linux-6609375_latest.zip -d $HOME/Android/cmdline-tools/
+          mv $HOME/Android/cmdline-tools/cmdline-tools $HOME/Android/cmdline-tools/latest
 
-          # Move to the correct location
-          if [ -d "$HOME/Android/cmdline-tools/cmdline-tools" ]; then
-              mv $HOME/Android/cmdline-tools/cmdline-tools $HOME/Android/cmdline-tools/latest
-          elif [ -d "$HOME/Android/cmdline-tools/tools" ]; then
-              mv $HOME/Android/cmdline-tools/tools $HOME/Android/cmdline-tools/latest
-          else
-              echo "No cmdline-tools directory found. Check the extraction output."
-              exit 1
-          fi
-
-      # Step 6: Verify Command Line Tools Installation
-      - name: Verify Command Line Tools Installation
-        run: |
-          ls -la $HOME/Android/cmdline-tools/latest/bin/
-          echo "Available tools:"
-          ls $HOME/Android/cmdline-tools/latest/bin/
-
-      # Step 7: Accept Android SDK Licenses
+      # Step 6: Accept Android SDK Licenses
       - name: Accept Android SDK Licenses
         run: |
-          for i in {1..3}; do
-              yes | $HOME/Android/cmdline-tools/latest/bin/sdkmanager --licenses && break || sleep 5
-          done
+          yes | $HOME/Android/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      # Step 8: Install specific Android SDK components
+      # Step 7: Install specific Android SDK components
       - name: Install specific Android SDK components
         run: |
           $HOME/Android/cmdline-tools/latest/bin/sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529" "platform-tools"
-          echo "Installed SDK components:"
-          $HOME/Android/cmdline-tools/latest/bin/sdkmanager --list
 
-      # Step 9: Install Python dependencies
+      # Step 8: Install Python dependencies
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install cython buildozer
 
-      # Step 10: Set up environment variables
+      # Step 9: Set up environment variables
       - name: Set up environment variables
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
@@ -95,31 +72,12 @@ jobs:
           echo "ANDROID_NDK_HOME=$HOME/Android/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "PATH=$HOME/Android/cmdline-tools/latest/bin:$HOME/Android/platform-tools:$HOME/Android/build-tools/30.0.3:$HOME/Android/ndk/21.4.7075529:$PATH" >> $GITHUB_ENV
 
-      # Step 11: Verify Android SDK and NDK setup
-      - name: Verify Android SDK and NDK setup
-        run: |
-          echo "Android SDK Root: $ANDROID_HOME"
-          echo "Android NDK Root: $ANDROID_NDK_HOME"
-          echo "PATH: $PATH"
-          echo "AIDL location:"
-          which aidl || echo "aidl not found in PATH"
-          echo "Testing AIDL command:"
-          aidl --help || echo "Failed to run aidl command"
-
-      # Step 12: Regenerate configure script
-      - name: Regenerate configure script
-        run: |
-          autoreconf -fi
-
-      # Step 13: Build the APK using Buildozer
+      # Step 10: Build the APK using Buildozer
       - name: Build APK
         run: |
-          echo "Building APK..."
-          for i in {1..3}; do
-              echo y | buildozer -v android debug && break || sleep 10
-          done
+          buildozer -v android debug
 
-      # Step 14: Upload APK artifacts
+      # Step 11: Upload APK artifacts
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
