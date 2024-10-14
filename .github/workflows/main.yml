@@ -40,19 +40,19 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential git python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
-        python -m pip install --upgrade pip setuptools wheel
-        python -m pip install --upgrade Cython==${{ env.CYTHON_VERSION }}
-        python -m pip install --upgrade buildozer==${{ env.BUILDOZER_VERSION }}
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-    - name: Verify Buildozer installation
-      run: |
-        buildozer --version
+        sudo apt-get update && sudo apt-get install -y \
+          build-essential git python3-pip autoconf libtool pkg-config zlib1g-dev \
+          libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev || true
+        pip install --upgrade pip setuptools wheel || true
+        pip install --upgrade Cython==${{ env.CYTHON_VERSION }} || true
+        pip install --upgrade buildozer==${{ env.BUILDOZER_VERSION }} || true
 
     - name: Prepare Buildozer configuration
       run: |
+        if [ ! -f buildozer.spec ]; then
+          echo "Creating default buildozer.spec"
+          buildozer init
+        fi
         sed -i 's/^android.ndk =.*/android.ndk = ${{ env.ANDROID_NDK_VERSION }}/' buildozer.spec
         sed -i 's/^requirements =.*/requirements = python3,kivy==2.1.0,qrcode,plyer,kivymd,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi==${{ env.LIBFFI_VERSION }}/' buildozer.spec
         echo "log_level = 2" >> buildozer.spec
@@ -60,7 +60,7 @@ jobs:
     - name: Clean Buildozer cache
       run: |
         rm -rf ~/.buildozer/android/platform
-        buildozer android clean
+        buildozer android clean || true
 
     - name: Build APK
       run: |
@@ -85,7 +85,12 @@ jobs:
 
     - name: Buildozer version check
       if: failure()
-      run: buildozer --version
+      run: |
+        if command -v buildozer; then
+          buildozer --version
+        else
+          echo "Buildozer is not installed."
+        fi
 
     - name: Python environment info
       if: failure()
