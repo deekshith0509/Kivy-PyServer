@@ -21,14 +21,14 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v2
         with:
-          java-version: '11'
+          java-version: '17'
           distribution: 'adopt'
 
       # Step 3: Install system dependencies
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget unzip openjdk-11-jdk build-essential \
+          sudo apt-get install -y wget unzip openjdk-17-jdk build-essential \
               zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
               libssl-dev libreadline-dev libffi-dev libsqlite3-dev \
               libbz2-dev
@@ -69,9 +69,8 @@ jobs:
           pip install cython buildozer
 
       # Step 8: Set up environment variables
-      - name: Set up environment variables
         run: |
-          echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
           echo "ANDROID_HOME=$HOME/Android" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/30.0.3:$ANDROID_NDK_HOME:$PATH" >> $GITHUB_ENV
