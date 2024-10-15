@@ -72,6 +72,8 @@ jobs:
           echo "ANDROIDAPI=31" >> $GITHUB_ENV
 
       - name: Build APK
+        env:
+          CLASSPATH: /usr/share/java/jaxb-api.jar:/usr/share/java/jaxb-impl.jar:/usr/share/java/jaxb-libs.jar:/usr/share/java/jaxb-xjc.jar:/usr/share/java/jaxb1-impl.jar:/usr/share/java/jaxb1-api.jar:/usr/share/java/jaxb1-libs.jar
         run: |
           buildozer android debug
 
