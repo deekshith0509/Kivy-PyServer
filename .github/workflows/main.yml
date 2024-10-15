@@ -46,6 +46,10 @@ jobs:
           pip install --upgrade pip
           pip install buildozer
 
+      - name: Install JAXB for JDK 11
+        run: |
+          sudo apt-get install -y libjaxb-api-java libjaxb-java libjaxb-java-doc
+
       - name: Configure Android SDK
         run: |
           mkdir -p $HOME/Android
@@ -53,13 +57,10 @@ jobs:
           wget -q https://dl.google.com/android/repository/sdk-tools-linux-3859397.zip
           unzip sdk-tools-linux-3859397.zip -d $HOME/Android
           # Add Android SDK tools to PATH
-          echo "$HOME/Android/tools/bin" >> $GITHUB_ENV
-          echo "$HOME/Android/platform-tools" >> $GITHUB_ENV
-          echo "$HOME/Android/tools" >> $GITHUB_ENV
+          echo "PATH=$PATH:$HOME/Android/tools/bin:$HOME/Android/platform-tools:$HOME/Android/tools" >> $GITHUB_ENV
           echo "ANDROID_HOME=$HOME/Android" >> $GITHUB_ENV  # Set ANDROID_HOME
           echo "ANDROID_SDK_ROOT=$HOME/Android" >> $GITHUB_ENV  # Set ANDROID_SDK_ROOT
-          echo "yes | $HOME/Android/tools/bin/sdkmanager --licenses"  # Accept SDK licenses
-          $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android --licenses
+          yes | $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android --licenses
           $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android "platform-tools" "platforms;android-31" "build-tools;30.0.3"
 
       - name: Install Android NDK
