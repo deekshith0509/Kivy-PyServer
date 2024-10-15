@@ -14,16 +14,16 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3  # Updated to v3 for compatibility with newer Node.js versions
+        uses: actions/checkout@v3
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v3  # Updated to v3
+        uses: actions/setup-java@v3
         with:
           java-version: '11'
-          distribution: 'temurin'  # Added the distribution input
+          distribution: 'temurin'  # Use Temurin for OpenJDK
 
       - name: Set up Python
-        uses: actions/setup-python@v4  # Updated to v4
+        uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
@@ -42,9 +42,17 @@ jobs:
             autoconf \
             automake \
             libtool \
-            unzip
+            unzip \
+            wget
           pip install --upgrade pip
           pip install buildozer
+
+      - name: Download JAXB Libraries
+        run: |
+          mkdir -p $HOME/jaxb
+          cd $HOME/jaxb
+          wget https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api/2.3.1/jaxb-api-2.3.1.jar
+          wget https://repo1.maven.org/maven2/org/glassfish/jaxb/jaxb-runtime/2.3.1/jaxb-runtime-2.3.1.jar
 
       - name: Configure Android SDK
         run: |
@@ -52,15 +60,14 @@ jobs:
           cd $HOME/Android
           wget -q https://dl.google.com/android/repository/sdk-tools-linux-3859397.zip
           unzip sdk-tools-linux-3859397.zip -d $HOME/Android
-          # Add Android SDK tools to PATH
           echo "ANDROID_HOME=$HOME/Android" >> $GITHUB_ENV  # Set ANDROID_HOME
           echo "ANDROID_SDK_ROOT=$HOME/Android" >> $GITHUB_ENV  # Set ANDROID_SDK_ROOT
           echo "PATH=$PATH:$HOME/Android/tools/bin:$HOME/Android/platform-tools" >> $GITHUB_ENV
-          
+
       - name: Accept SDK Licenses
         run: |
-          yes | $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android --licenses
-          $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android "platform-tools" "platforms;android-31" "build-tools;30.0.3"
+          yes | java -cp "$HOME/jaxb/jaxb-api-2.3.1.jar:$HOME/jaxb/jaxb-runtime-2.3.1.jar:$HOME/Android/tools/lib/*" $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android --licenses
+          java -cp "$HOME/jaxb/jaxb-api-2.3.1.jar:$HOME/jaxb/jaxb-runtime-2.3.1.jar:$HOME/Android/tools/lib/*" $HOME/Android/tools/bin/sdkmanager --sdk_root=$HOME/Android "platform-tools" "platforms;android-31" "build-tools;30.0.3"
 
       - name: Install Android NDK
         run: |
@@ -72,7 +79,7 @@ jobs:
 
       - name: Build APK
         run: |
-          export CLASSPATH=$(pwd)/jaxb-api.jar:$(pwd)/jaxb-impl.jar:$(pwd)/jaxb-xjc.jar  # Adjust these paths if necessary
+          export CLASSPATH="$HOME/jaxb/jaxb-api-2.3.1.jar:$HOME/jaxb/jaxb-runtime-2.3.1.jar"
           buildozer android debug
 
       - name: Upload APK
