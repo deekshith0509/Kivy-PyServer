@@ -57,7 +57,7 @@ jobs:
         buildozer -v android debug
 
     - name: Upload APK
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3  # Updated to v3
       with:
         name: my-app-apk
         path: bin/*.apk  # This assumes the APK is created in the bin directory at the project root
