@@ -3,10 +3,10 @@ name: Build APK
 on:
   push:
     branches:
-      - main  # Trigger on push to main branch
+      - main
   pull_request:
     branches:
-      - main  # Trigger on pull requests to main branch
+      - main
 
 jobs:
   build:
@@ -20,6 +20,7 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: '3.9'  # Specify the Python version
+
     - name: Install Buildozer and Dependencies
       run: |
         sudo apt-get update
@@ -50,13 +51,16 @@ jobs:
         pip install --upgrade pip setuptools wheel
         pip install buildozer cython  # Include Cython installation
 
+    - name: Accept Android SDK Licenses
+      run: yes | sdkmanager --licenses
+
     - name: Build APK
       run: |
         cd .  # Use the current directory if the buildozer.spec is in the root
         buildozer -v android debug
 
     - name: Upload APK
-      uses: actions/upload-artifact@v3  # Updated to v3
+      uses: actions/upload-artifact@v3
       with:
         name: my-app-apk
         path: bin/*.apk  # This assumes the APK is created in the bin directory at the project root
