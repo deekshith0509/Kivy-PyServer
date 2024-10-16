@@ -20,7 +20,6 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: '3.9'  # Specify the Python version
-
     - name: Install Buildozer and Dependencies
       run: |
         sudo apt-get update
@@ -49,7 +48,7 @@ jobs:
           libgstreamer-plugins-base1.0-dev
 
         pip install --upgrade pip setuptools wheel
-        pip install buildozer
+        pip install buildozer cython  # Include Cython installation
 
     - name: Build APK
       run: |
