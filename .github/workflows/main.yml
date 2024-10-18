@@ -1,85 +1,158 @@
-name: Build APK
+name: Build and Deploy pyServer APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, develop ]
   pull_request:
-    branches:
-      - main
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  BUILDOZER_VERSION: 1.5.0
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: '3.9'
 
-    - name: Install Buildozer and Dependencies
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('buildozer.spec') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Cache Buildozer global directory
+      uses: actions/cache@v3
+      with:
+        path: ~/.buildozer
+        key: ${{ runner.os }}-buildozer-${{ env.BUILDOZER_VERSION }}
+
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get upgrade -y
-        sudo apt-get install -f
         sudo apt-get install -y \
-          build-essential \
-          python3-dev \
           git \
-          python3-setuptools \
           python3-pip \
-          python3-venv \
-          openjdk-11-jdk \
-          unzip \
+          build-essential \
+          libsqlite3-dev \
           zlib1g-dev \
           libncurses5-dev \
-          libbz2-dev \
-          libffi-dev \
+          libgdbm-dev \
+          libnss3-dev \
           libssl-dev \
-          libsqlite3-dev \
+          libreadline-dev \
+          libffi-dev \
+          wget \
+          libbz2-dev \
           liblzma-dev \
+          lzma \
           libjpeg-dev \
           libpng-dev \
           libfreetype6-dev \
-          libxml2-dev \
-          libxslt1-dev \
           libgstreamer1.0-dev \
           libgstreamer-plugins-base1.0-dev \
-          libunwind-dev
+          libwebp-dev \
+          libopenjp2-7-dev \
+          libtiff5-dev
+        pip3 install --upgrade pip
+        pip3 install buildozer==$BUILDOZER_VERSION
+        pip3 install cython
 
-        pip install --upgrade pip setuptools wheel
-        pip install buildozer cython
+    - name: Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
 
-    - name: Install Android SDK Command-line Tools
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v2
+
+    - name: Cache Android NDK and SDK
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.buildozer
+        key: ${{ runner.os }}-buildozer-${{ env.BUILDOZER_VERSION }}-${{ hashFiles('buildozer.spec') }}
+
+    - name: Accept Android SDK licenses
       run: |
-        mkdir -p $HOME/sdk/cmdline-tools
-        wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O commandlinetools.zip
-        unzip commandlinetools.zip -d $HOME/sdk/cmdline-tools
-        mv $HOME/sdk/cmdline-tools/cmdline-tools $HOME/sdk/cmdline-tools/latest
-        export ANDROID_HOME=$HOME/sdk
-        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-33" "build-tools;33.0.0" "build-tools;35.0.0"
-
-    - name: Accept Android SDK Licenses
-      run: |
-        export ANDROID_HOME=$HOME/sdk
-        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
         yes | sdkmanager --licenses
+        yes | sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
 
     - name: Build APK
-      env:
-        ANDROID_HOME: $HOME/sdk
-        PATH: $ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
       run: |
-        cd .
-        buildozer -v android debug
+        buildozer android debug
 
-    - name: Upload APK
+    - name: Sign APK
+      env:
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore keystore.jks \
+          -storepass $KEYSTORE_PASSWORD \
+          -keypass $KEY_PASSWORD \
+          bin/*.apk $KEY_ALIAS
+
+    - name: Verify APK
+      run: |
+        jarsigner -verify -verbose -certs bin/*.apk
+
+    - name: Upload Debug APK
       uses: actions/upload-artifact@v3
       with:
-        name: my-app-apk
+        name: debug-apk
         path: bin/*.apk
+
+    - name: Run tests
+      run: |
+        pip install pytest
+        pytest tests/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Download APK from build
+      uses: actions/download-artifact@v3
+      with:
+        name: debug-apk
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        release_name: Release ${{ github.run_number }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./server-0.1-arm64-v8a-debug.apk
+        asset_name: pyServer-${{ github.run_number }}.apk
+        asset_content_type: application/vnd.android.package-archive
+
+    - name: Upload to Google Drive
+      uses: willo32/google-drive-upload-action@v1
+      with:
+        target: ./server-0.1-arm64-v8a-debug.apk
+        credentials: ${{ secrets.GOOGLE_DRIVE_CREDENTIALS }}
+        parent_folder_id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
