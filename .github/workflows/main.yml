@@ -54,7 +54,7 @@ jobs:
           buildozer -v android release  # Build release APK (optional)
 
       - name: Store APK as Artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3  # Updated to version v3
         with:
           name: Kivy-App-APK
           path: bin/*.apk  # Path where APKs are generated
