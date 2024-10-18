@@ -32,17 +32,18 @@ jobs:
             curl \
             zip \
             libgl1-mesa-glx \
-            libglu1-mesa
+            libglu1-mesa \
+            aidl  # Install AIDL
 
-      - name: Install Buildozer
+      - name: Install Buildozer and Dependencies
         run: |
           pip install --upgrade pip
-          pip install buildozer
+          pip install buildozer cython  # Install Buildozer and Cython
 
       - name: Accept Licenses
         run: |
-          yes | buildozer android update
-          yes | buildozer android update --requirements=python3,kivy
+          yes | sdkmanager --licenses  # Accept all SDK licenses
+          yes | buildozer android update  # Update Buildozer
 
       - name: Build APK
         run: |
