@@ -36,9 +36,13 @@ jobs:
         path: ~/.buildozer
         key: ${{ runner.os }}-buildozer-${{ env.BUILDOZER_VERSION }}
 
-    - name: Install dependencies
+    - name: Update and upgrade packages
       run: |
         sudo apt-get update
+        sudo apt-get upgrade -y
+
+    - name: Install dependencies
+      run: |
         sudo apt-get install -y \
           git \
           python3-pip \
@@ -58,11 +62,20 @@ jobs:
           libjpeg-dev \
           libpng-dev \
           libfreetype6-dev \
-          libgstreamer1.0-dev \
-          libgstreamer-plugins-base1.0-dev \
           libwebp-dev \
           libopenjp2-7-dev \
           libtiff5-dev
+
+    - name: Install libunwind-dev
+      run: |
+        sudo apt-get install -y libunwind-dev
+
+    - name: Install libgstreamer1.0-dev
+      run: |
+        sudo apt-get install -y libgstreamer1.0-dev
+
+    - name: Install Python packages
+      run: |
         pip3 install --upgrade pip
         pip3 install buildozer==$BUILDOZER_VERSION
         pip3 install cython
