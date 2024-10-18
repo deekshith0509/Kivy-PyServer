@@ -59,7 +59,7 @@ jobs:
         mv $HOME/sdk/cmdline-tools/cmdline-tools $HOME/sdk/cmdline-tools/latest
         export ANDROID_HOME=$HOME/sdk
         export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-33" "build-tools;33.0.0" "build-tools;35.0.0"
 
     - name: Accept Android SDK Licenses
       run: |
@@ -68,9 +68,10 @@ jobs:
         yes | sdkmanager --licenses
 
     - name: Build APK
+      env:
+        ANDROID_HOME: $HOME/sdk
+        PATH: $ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
       run: |
-        export ANDROID_HOME=$HOME/sdk
-        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
         cd .
         buildozer -v android debug
 
