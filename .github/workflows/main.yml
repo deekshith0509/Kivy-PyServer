@@ -86,7 +86,10 @@ jobs:
     - name: Accept Android SDK licenses
       run: |
         yes | sdkmanager --licenses
-        yes | sdkmanager "platforms;android-33" "build-tools;33.0.0" "build-tools;35.0.0" "ndk;25.2.9519653"
+        yes | sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+
+    - name: List Installed SDK Packages
+      run: sdkmanager --list
 
     - name: Build APK
       run: |
