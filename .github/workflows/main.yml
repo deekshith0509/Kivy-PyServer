@@ -39,10 +39,6 @@ jobs:
           pip install --upgrade pip
           pip install buildozer
 
-      - name: Prepare Buildozer
-        run: |
-          buildozer init  # Initialize buildozer if not already done
-
       - name: Accept Licenses
         run: |
           yes | buildozer android update
