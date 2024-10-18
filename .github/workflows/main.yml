@@ -3,7 +3,7 @@ name: Build Kivy App for Android
 on:
   push:
     branches:
-      - main  # Change to your default branch if needed
+      - main  # Adjust to your default branch if needed
 
 jobs:
   build:
@@ -17,7 +17,7 @@ jobs:
       - name: Set Up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.9'  # Specify the Python version to use
+          python-version: '3.9'  # Specify the Python version
 
       - name: Install Buildozer Dependencies
         run: |
@@ -34,7 +34,7 @@ jobs:
             zip \
             libgl1-mesa-glx \
             libglu1-mesa \
-            # Install Android SDK tools
+            # Install Android SDK command line tools
             && wget https://dl.google.com/android/repository/commandlinetools-linux-7583922_latest.zip \
             && sudo mkdir -p /usr/local/android-sdk/cmdline-tools \
             && sudo unzip commandlinetools-linux-7583922_latest.zip -d /usr/local/android-sdk/cmdline-tools \
@@ -46,7 +46,7 @@ jobs:
           echo "export ANDROID_HOME=/usr/local/android-sdk" >> $GITHUB_ENV
           echo "export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
-      - name: Install Buildozer and Dependencies
+      - name: Install Buildozer and Cython
         run: |
           pip install --upgrade pip
           pip install buildozer cython  # Install Buildozer and Cython
@@ -62,7 +62,7 @@ jobs:
 
       # Stage 3: Upload APK
       - name: Upload APK to Repository
-        uses: actions/upload-artifact@v3  # Updated to version v3
+        uses: actions/upload-artifact@v3  # Use the latest version of the upload artifact action
         with:
           name: Kivy-App-APK
           path: bin/*.apk  # Path where APKs are generated
