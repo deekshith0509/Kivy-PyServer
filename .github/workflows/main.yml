@@ -8,11 +8,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
+      # Stage 1: Environment Setup
       - name: Checkout Repository
         uses: actions/checkout@v2
-      
+
       - name: Set Up Python
         uses: actions/setup-python@v2
         with:
@@ -38,28 +39,36 @@ jobs:
             && sudo mkdir -p /usr/local/android-sdk/cmdline-tools \
             && sudo unzip commandlinetools-linux-7583922_latest.zip -d /usr/local/android-sdk/cmdline-tools \
             && rm commandlinetools-linux-7583922_latest.zip \
-            && sudo mv /usr/local/android-sdk/cmdline-tools/cmdline-tools /usr/local/android-sdk/cmdline-tools/latest \
-            && echo "export ANDROID_HOME=/usr/local/android-sdk" >> $GITHUB_ENV \
-            && echo "export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
+            && sudo mv /usr/local/android-sdk/cmdline-tools/cmdline-tools /usr/local/android-sdk/cmdline-tools/latest
+
+      - name: Set Android Environment Variables
+        run: |
+          echo "export ANDROID_HOME=/usr/local/android-sdk" >> $GITHUB_ENV
+          echo "export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
       - name: Install Buildozer and Dependencies
         run: |
           pip install --upgrade pip
           pip install buildozer cython  # Install Buildozer and Cython
 
-      - name: Accept Licenses
+      # Stage 2: Build APK
+      - name: Accept Licenses and Build APK
         run: |
           yes | sdkmanager --licenses  # Accept all SDK licenses
           yes | sdkmanager "platform-tools" "platforms;android-29"  # Install required SDK components
           yes | buildozer android update  # Update Buildozer
-
-      - name: Build APK
-        run: |
           buildozer -v android debug  # Build debug APK
           buildozer -v android release  # Build release APK (optional)
 
-      - name: Store APK as Artifact
+      # Stage 3: Upload APK
+      - name: Upload APK to Repository
         uses: actions/upload-artifact@v3  # Updated to version v3
         with:
           name: Kivy-App-APK
           path: bin/*.apk  # Path where APKs are generated
+
+      # Cleanup step (optional)
+      - name: Cleanup
+        run: |
+          echo "Cleaning up..."
+          # Add any cleanup commands if necessary
