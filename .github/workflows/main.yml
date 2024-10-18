@@ -33,7 +33,14 @@ jobs:
             zip \
             libgl1-mesa-glx \
             libglu1-mesa \
-            aidl  # Install AIDL
+            # Install Android SDK tools
+            && wget https://dl.google.com/android/repository/commandlinetools-linux-7583922_latest.zip \
+            && sudo mkdir -p /usr/local/android-sdk/cmdline-tools \
+            && sudo unzip commandlinetools-linux-7583922_latest.zip -d /usr/local/android-sdk/cmdline-tools \
+            && rm commandlinetools-linux-7583922_latest.zip \
+            && sudo mv /usr/local/android-sdk/cmdline-tools/cmdline-tools /usr/local/android-sdk/cmdline-tools/latest \
+            && echo "export ANDROID_HOME=/usr/local/android-sdk" >> $GITHUB_ENV \
+            && echo "export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
       - name: Install Buildozer and Dependencies
         run: |
@@ -43,6 +50,7 @@ jobs:
       - name: Accept Licenses
         run: |
           yes | sdkmanager --licenses  # Accept all SDK licenses
+          yes | sdkmanager "platform-tools" "platforms;android-29"  # Install required SDK components
           yes | buildozer android update  # Update Buildozer
 
       - name: Build APK
