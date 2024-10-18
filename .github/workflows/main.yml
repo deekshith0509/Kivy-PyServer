@@ -1,161 +1,59 @@
-name: Build and Deploy pyServer APK
+name: Build Android APK
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-  workflow_dispatch:
-
-env:
-  BUILDOZER_VERSION: 1.5.0
+    branches:
+      - master
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
-
-    - name: Cache Python dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-
-    - name: Cache Buildozer global directory
-      uses: actions/cache@v3
-      with:
-        path: ~/.buildozer
-        key: ${{ runner.os }}-buildozer-${{ env.BUILDOZER_VERSION }}
-
-    - name: Update and upgrade packages
-      run: |
-        sudo apt-get update
-        sudo apt-get upgrade -y
+        python-version: '3.9'  # Change to the required Python version
 
     - name: Install dependencies
       run: |
-        sudo apt-get install -y \
-          git \
-          python3-pip \
-          build-essential \
-          libsqlite3-dev \
-          zlib1g-dev \
-          libncurses5-dev \
-          libgdbm-dev \
-          libnss3-dev \
-          libssl-dev \
-          libreadline-dev \
-          libffi-dev \
-          wget \
-          libbz2-dev \
-          liblzma-dev \
-          lzma \
-          libjpeg-dev \
-          libpng-dev \
-          libfreetype6-dev \
-          libwebp-dev \
-          libopenjp2-7-dev \
-          libtiff5-dev \
-          libunwind-dev \
-          libgstreamer1.0-dev
+        python -m pip install --upgrade pip
+        pip install buildozer
 
-    - name: Install Python packages
+    - name: Set up Android SDK
       run: |
-        pip3 install --upgrade pip
-        pip3 install buildozer==$BUILDOZER_VERSION
-        pip3 install cython
-
-    - name: Set up JDK 11
-      uses: actions/setup-java@v3
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v2
+        mkdir -p $HOME/Android/Sdk
+        echo "export ANDROID_HOME=$HOME/Android/Sdk" >> $GITHUB_ENV
+        echo "export PATH=$ANDROID_HOME/emulator:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools:$PATH" >> $GITHUB_ENV
 
     - name: Accept Android SDK licenses
       run: |
         yes | sdkmanager --licenses
-        yes | sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+        yes | sdkmanager "platforms;android-33" "build-tools;35.0.0" "ndk;25.2.9519653"
 
-    - name: List Installed SDK Packages
-      run: sdkmanager --list
-
-    - name: Build APK
+    - name: Install Apache Ant
       run: |
-        buildozer android debug
+        wget https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.12-bin.tar.gz
+        tar -xzf apache-ant-1.10.12-bin.tar.gz
+        sudo mv apache-ant-1.10.12 /opt/ant
+        echo 'export ANT_HOME=/opt/ant' >> $GITHUB_ENV
+        echo 'export PATH=$PATH:$ANT_HOME/bin' >> $GITHUB_ENV
 
-    - name: Sign APK
-      env:
-        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    - name: Install additional dependencies for buildozer
       run: |
-        jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore keystore.jks \
-          -storepass $KEYSTORE_PASSWORD \
-          -keypass $KEY_PASSWORD \
-          bin/*.apk $KEY_ALIAS
+        sudo apt-get update
+        sudo apt-get install -y openjdk-8-jdk
 
-    - name: Verify APK
+    - name: Build the APK
       run: |
-        jarsigner -verify -verbose -certs bin/*.apk
+        cd your_project_directory  # Change to your project directory
+        buildozer -v android debug
 
-    - name: Upload Debug APK
+    - name: Upload APK
       uses: actions/upload-artifact@v3
       with:
-        name: debug-apk
-        path: bin/*.apk
-
-    - name: Run tests
-      run: |
-        pip install pytest
-        pytest tests/
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    steps:
-    - name: Download APK from build
-      uses: actions/download-artifact@v3
-      with:
-        name: debug-apk
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ github.run_number }}
-        release_name: Release ${{ github.run_number }}
-        draft: false
-        prerelease: false
-
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./server-0.1-arm64-v8a-debug.apk
-        asset_name: pyServer-${{ github.run_number }}.apk
-        asset_content_type: application/vnd.android.package-archive
-
-    - name: Upload to Google Drive
-      uses: willo32/google-drive-upload-action@v1
-      with:
-        target: ./server-0.1-arm64-v8a-debug.apk
-        credentials: ${{ secrets.GOOGLE_DRIVE_CREDENTIALS }}
-        parent_folder_id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        name: apk
+        path: your_project_directory/bin/*.apk  # Change to the correct path where the APK is generated
