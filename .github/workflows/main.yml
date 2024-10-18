@@ -24,6 +24,8 @@ jobs:
     - name: Install Buildozer and Dependencies
       run: |
         sudo apt-get update
+        sudo apt-get upgrade -y
+        sudo apt-get install -f
         sudo apt-get install -y \
           build-essential \
           python3-dev \
@@ -46,7 +48,8 @@ jobs:
           libxml2-dev \
           libxslt1-dev \
           libgstreamer1.0-dev \
-          libgstreamer-plugins-base1.0-dev
+          libgstreamer-plugins-base1.0-dev \
+          libunwind-dev
 
         pip install --upgrade pip setuptools wheel
         pip install buildozer cython
