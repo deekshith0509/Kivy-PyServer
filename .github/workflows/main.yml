@@ -1,59 +1,60 @@
-name: Build Android APK
+name: Build Kivy App for Android
 
 on:
   push:
     branches:
-      - master
+      - main  # Change to your default branch if needed
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+      
+      - name: Set Up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'  # Specify the Python version to use
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'  # Change to the required Python version
+      - name: Install Buildozer Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            python3-pip \
+            python3-setuptools \
+            python3-venv \
+            openjdk-8-jdk \
+            unzip \
+            wget \
+            curl \
+            zip \
+            libgl1-mesa-glx \
+            libglu1-mesa
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install buildozer
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade pip
+          pip install buildozer
 
-    - name: Set up Android SDK
-      run: |
-        mkdir -p $HOME/Android/Sdk
-        echo "export ANDROID_HOME=$HOME/Android/Sdk" >> $GITHUB_ENV
-        echo "export PATH=$ANDROID_HOME/emulator:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools:$PATH" >> $GITHUB_ENV
+      - name: Prepare Buildozer
+        run: |
+          buildozer init  # Initialize buildozer if not already done
 
-    - name: Accept Android SDK licenses
-      run: |
-        yes | sdkmanager --licenses
-        yes | sdkmanager "platforms;android-33" "build-tools;35.0.0" "ndk;25.2.9519653"
+      - name: Accept Licenses
+        run: |
+          yes | buildozer android update
+          yes | buildozer android update --requirements=python3,kivy
 
-    - name: Install Apache Ant
-      run: |
-        wget https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.12-bin.tar.gz
-        tar -xzf apache-ant-1.10.12-bin.tar.gz
-        sudo mv apache-ant-1.10.12 /opt/ant
-        echo 'export ANT_HOME=/opt/ant' >> $GITHUB_ENV
-        echo 'export PATH=$PATH:$ANT_HOME/bin' >> $GITHUB_ENV
+      - name: Build APK
+        run: |
+          buildozer -v android debug  # Build debug APK
+          buildozer -v android release  # Build release APK (optional)
 
-    - name: Install additional dependencies for buildozer
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y openjdk-8-jdk
-
-    - name: Build the APK
-      run: |
-        cd your_project_directory  # Change to your project directory
-        buildozer -v android debug
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v3
-      with:
-        name: apk
-        path: your_project_directory/bin/*.apk  # Change to the correct path where the APK is generated
+      - name: Store APK as Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: Kivy-App-APK
+          path: bin/*.apk  # Path where APKs are generated
