@@ -64,15 +64,9 @@ jobs:
           libfreetype6-dev \
           libwebp-dev \
           libopenjp2-7-dev \
-          libtiff5-dev
-
-    - name: Install libunwind-dev
-      run: |
-        sudo apt-get install -y libunwind-dev
-
-    - name: Install libgstreamer1.0-dev
-      run: |
-        sudo apt-get install -y libgstreamer1.0-dev
+          libtiff5-dev \
+          libunwind-dev \
+          libgstreamer1.0-dev
 
     - name: Install Python packages
       run: |
@@ -89,17 +83,10 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
 
-    - name: Cache Android NDK and SDK
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.buildozer
-        key: ${{ runner.os }}-buildozer-${{ env.BUILDOZER_VERSION }}-${{ hashFiles('buildozer.spec') }}
-
     - name: Accept Android SDK licenses
       run: |
         yes | sdkmanager --licenses
-        yes | sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+        yes | sdkmanager "platforms;android-33" "build-tools;33.0.0" "build-tools;35.0.0" "ndk;25.2.9519653"
 
     - name: Build APK
       run: |
