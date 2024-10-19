@@ -5,7 +5,7 @@ android.archs = arm64-v8a
 package.domain = com.share
 source.main = main.py
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,dm
+source.include_exts = py,png,jpg,kv,atlas,dm,
 orientation = portrait
 requirements = python3,kivy,qrcode,plyer,kivymd,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi
 fullscreen = 0
@@ -16,6 +16,9 @@ android.presplash_color = #FFFFFF
 
 # (bool) Use --debug to enable debug mode
 debug = 1
+android.allow_backup = True
+android.logcat = True
+android.add_activities = org.kivy.android.PythonActivity
 
 # (str) Android NDK version
 # (str) Android NDK version
