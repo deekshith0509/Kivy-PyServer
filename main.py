@@ -71,7 +71,6 @@ from PIL import Image as PILImage
 from kivy.utils import platform
 from kivy.clock import Clock
 
-kivy.require("2.2.0")
 try:
 
     class WSLCompatiblePermissions:
@@ -945,11 +944,30 @@ try:
 
         def open_filechooser(self, instance):
             """Open the file chooser for directory selection."""
-            self.file_manager = MDFileManager(
-                exit_manager=self.close_file_manager,
-                select_path=self.select_directory,
-            )
-            self.file_manager.show('/')  # Show the file manager at the root directory
+            if platform == 'android':
+                self.open_android_filechooser()
+            else:
+                self.file_manager = MDFileManager(
+                    exit_manager=self.close_file_manager,
+                    select_path=self.select_directory,
+                )
+                self.file_manager.show('/')  # Show the file manager at the root directory
+
+        def open_android_filechooser(self):
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            mActivity.startActivityForResult(intent, 42)  # 42 is our request code
+
+        def on_activity_result(self, request_code, result_code, intent):
+            if request_code == 42 and result_code == -1:  # RESULT_OK is -1
+                uri = intent.getData()
+                path = self.get_path_from_uri(uri)
+                self.select_directory(path)
+
+        def get_path_from_uri(self, uri):
+            DocumentsContract = autoclass('android.provider.DocumentsContract')
+            document_id = DocumentsContract.getTreeDocumentId(uri)
+            path = document_id.split(':')[1]
+            return os.path.join(primary_external_storage_path(), path)
 
         def close_file_manager(self, *args):
             """Close the file manager."""
@@ -1074,10 +1092,18 @@ try:
             if platform == 'android':
                 Clock.schedule_once(lambda dt: self.permission_handler.check_and_request_permissions(), 0)
             # Rest of your app initialization
+                from jnius import autoclass
+
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                activity = PythonActivity.mActivity            
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
             self.sm.add_widget(LogScreen(name='logs'))
             return self.sm
+        def on_activity_result(self, request_code, result_code, intent):
+            if hasattr(self.root, 'on_activity_result'):
+                self.root.on_activity_result(request_code, result_code, intent)
+
 
         def log_output(self, message):
             # Get the current log screen and call its log_output method
