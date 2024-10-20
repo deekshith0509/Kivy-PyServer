@@ -1,3 +1,5 @@
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.button import MDRaisedButton
 import webbrowser
 from kivy.core.window import Window
 
@@ -752,7 +754,6 @@ try:
             log_message(f"Error starting server: {e}")
             
 
-
     class MainScreen(Screen):
         qr_image = ObjectProperty(None)
 
@@ -765,7 +766,7 @@ try:
             self.build()
 
         def build(self):
-            layout = BoxLayout(orientation='vertical', padding=[10, 10, 10, 10], spacing=10)
+            layout = BoxLayout(orientation='vertical', padding=[10, 10, 10, 10], spacing=5)
 
             # Set the background color
             with self.canvas.before:
@@ -774,21 +775,23 @@ try:
 
             # Title Label
             self.title_label = MDLabel(
-                text="Storage Selection App",
+                text="PyServer",
                 halign="center",
                 theme_text_color="Custom",
                 text_color=get_color_from_hex("#333333"),
                 font_style="H4",
                 size_hint_y=None,
-                height=dp(60)
+                height=dp(50),
+                pos_hint={'center_x': 0.5, 'center_y': -0.4}
+                
             )
             layout.add_widget(self.title_label)
 
             # QR Code Display
-            qr_layout = RelativeLayout(size_hint_y=None, height=dp(250))
+            qr_layout = RelativeLayout(size_hint_y=None, height=dp(200))
             self.qr_image = Image(
                 size_hint=(None, None),
-                size=(dp(200), dp(200)),
+                size=(dp(100), dp(100)),
                 allow_stretch=True,
                 keep_ratio=True,
                 pos_hint={'center_x': 0.5, 'center_y': 0.5}
@@ -807,20 +810,28 @@ try:
             self.ip_label.bind(on_touch_down=self.open_link)
             layout.add_widget(self.ip_label)
 
-            # Button Layout
-            button_layout = BoxLayout(orientation='vertical', spacing=dp(10), size_hint_y=None, height=dp(180))
+            # Directory Input Layout
+            dir_input_layout = BoxLayout(orientation='horizontal', spacing=dp(10), size_hint_y=None, height=dp(50))
 
-            # Select Directory Button
-            button_select = MDRaisedButton(
-                text="Select Directory",
-                size_hint_x=0.8,
-                height=dp(50),
-                pos_hint={'center_x': 0.5},
-                md_bg_color=get_color_from_hex("#6200EA"),
-                text_color=get_color_from_hex("#FFFFFF")
+            # Directory Input Text Field
+            self.directory_input = TextInput(
+                hint_text="Enter directory path",
+                multiline=False,
+                size_hint_x=0.7,
+                pos_hint={'center_x': 0.5}
             )
-            button_select.bind(on_press=self.open_filechooser)
-            button_layout.add_widget(button_select)
+            dir_input_layout.add_widget(self.directory_input)
+
+            # Enter Button
+            button_enter = MDRaisedButton(
+                text="Enter",
+                size_hint_x=0.3,
+                pos_hint={'center_x': 0.5}
+            )
+            button_enter.bind(on_press=self.enter_directory)
+            dir_input_layout.add_widget(button_enter)
+
+            layout.add_widget(dir_input_layout)
 
             # Start/Stop Server Button
             self.button_start_stop = MDRaisedButton(
@@ -832,7 +843,7 @@ try:
                 text_color=get_color_from_hex("#000000")
             )
             self.button_start_stop.bind(on_press=self.toggle_server)
-            button_layout.add_widget(self.button_start_stop)
+            layout.add_widget(self.button_start_stop)
 
             # View Logs Button
             button_view_logs = MDRaisedButton(
@@ -844,9 +855,7 @@ try:
                 text_color=get_color_from_hex("#000000")
             )
             button_view_logs.bind(on_press=self.switch_to_logs)
-            button_layout.add_widget(button_view_logs)
-
-            layout.add_widget(button_layout)
+            layout.add_widget(button_view_logs)
 
             # Information Label
             info_label = MDLabel(
@@ -854,8 +863,8 @@ try:
                 halign='center',
                 theme_text_color="Custom",
                 text_color=get_color_from_hex("#555555"),
-                size_hint_y=None,
-                height=dp(60)
+                pos_hint={'center_x': 0.5, 'center_y': -0.09},                
+                height=dp(20)
             )
             layout.add_widget(info_label)
 
@@ -871,6 +880,33 @@ try:
             layout.add_widget(button_quit)
 
             self.add_widget(layout)
+
+        # Add this method to handle the "Enter" button action
+
+        def enter_directory(self, instance):
+            """Get the directory input from the user and start the server."""
+            directory = self.directory_input.text.strip()  # Get the input from the TextInput
+            if directory:  # Check if the directory is not empty
+                if os.path.isdir(directory):  # Check if the directory is valid
+                    self.start_server(directory)  # Start the server with the entered directory
+                    self.directory_input.text = ""  # Clear the input field after submission
+                else:
+                    self.show_error_dialog("Please enter a valid directory path.")  # Show a message if the directory is invalid
+            else:
+                self.show_error_dialog("Please enter a directory path.")  # Show a message if the directory is empty
+
+        def show_error_dialog(self, message):
+            """Display a modern MDDialog with the provided message."""
+            self.dialog = MDDialog(
+                text=message,
+                buttons=[
+                    MDRaisedButton(
+                        text="OK",
+                        on_release=lambda x: self.dialog.dismiss()
+                    )
+                ]
+            )
+            self.dialog.open()
 
         def _update_rect(self, instance, value):
             self.rect.pos = instance.pos
@@ -888,7 +924,10 @@ try:
             if self.server_running:
                 self.stop_server()  # Stop the server if it's running
             else:
-                self.open_filechooser(instance)  # Open the file chooser if it's not running
+                self.enter_directory(instance)  # Trigger the enter_directory method if server is not running
+
+        # ... (rest of your existing methods remain unchanged)
+
 
 
         def stop_server(self):
@@ -930,7 +969,7 @@ try:
                 self.qr_image.size = qr_texture.size
                 self.q_image.canvas.ask_update()
             else:
-                print("Failed to generate QR code texture")
+                pass
             
             self.update_ip_label()  # Update the IP label
             self.server_running = True
@@ -944,30 +983,11 @@ try:
 
         def open_filechooser(self, instance):
             """Open the file chooser for directory selection."""
-            if platform == 'android':
-                self.open_android_filechooser()
-            else:
-                self.file_manager = MDFileManager(
-                    exit_manager=self.close_file_manager,
-                    select_path=self.select_directory,
-                )
-                self.file_manager.show('/')  # Show the file manager at the root directory
-
-        def open_android_filechooser(self):
-            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-            mActivity.startActivityForResult(intent, 42)  # 42 is our request code
-
-        def on_activity_result(self, request_code, result_code, intent):
-            if request_code == 42 and result_code == -1:  # RESULT_OK is -1
-                uri = intent.getData()
-                path = self.get_path_from_uri(uri)
-                self.select_directory(path)
-
-        def get_path_from_uri(self, uri):
-            DocumentsContract = autoclass('android.provider.DocumentsContract')
-            document_id = DocumentsContract.getTreeDocumentId(uri)
-            path = document_id.split(':')[1]
-            return os.path.join(primary_external_storage_path(), path)
+            self.file_manager = MDFileManager(
+                exit_manager=self.close_file_manager,
+                select_path=self.select_directory,
+            )
+            self.file_manager.show('/')  # Show the file manager at the root directory
 
         def close_file_manager(self, *args):
             """Close the file manager."""
@@ -1092,18 +1112,10 @@ try:
             if platform == 'android':
                 Clock.schedule_once(lambda dt: self.permission_handler.check_and_request_permissions(), 0)
             # Rest of your app initialization
-                from jnius import autoclass
-
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                activity = PythonActivity.mActivity            
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
             self.sm.add_widget(LogScreen(name='logs'))
             return self.sm
-        def on_activity_result(self, request_code, result_code, intent):
-            if hasattr(self.root, 'on_activity_result'):
-                self.root.on_activity_result(request_code, result_code, intent)
-
 
         def log_output(self, message):
             # Get the current log screen and call its log_output method
