@@ -926,8 +926,6 @@ try:
             else:
                 self.enter_directory(instance)  # Trigger the enter_directory method if server is not running
 
-        # ... (rest of your existing methods remain unchanged)
-
 
 
         def stop_server(self):
@@ -998,28 +996,41 @@ try:
             """Fetch the local IP address."""
             ip = None
             try:
-                if platform.system() == "Windows":
-                    output = subprocess.check_output(['ipconfig'], text=True)
-                    for line in output.splitlines():
-                        if 'IPv4 Address' in line:
-                            ip = line.split(':')[1].strip()
-                            break
-                else:
-                    output = subprocess.check_output(['ifconfig'], text=True)
-                    for line in output.splitlines():
-                        if 'inet ' in line and '127.0.0.1' not in line:
-                            ip = line.split()[1]
-                            break
-                    if ip is None:
-                        output = subprocess.check_output(['ip', 'addr'], text=True)
+                # Try getting the IP by connecting to an external server
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                try:
+                    if platform.system() == "Windows":
+                        output = subprocess.check_output(['ipconfig'], text=True)
+                        for line in output.splitlines():
+                            if 'IPv4 Address' in line:
+                                ip = line.split(':')[1].strip()
+                                break
+                    else:
+                        output = subprocess.check_output(['ifconfig'], text=True)
                         for line in output.splitlines():
                             if 'inet ' in line and '127.0.0.1' not in line:
-                                ip = line.split()[1].split('/')[0]
+                                ip = line.split()[1]
                                 break
-            except Exception as e:
-                log_message(f"Error fetching local IP: {e}")
+                        if ip is None:
+                            output = subprocess.check_output(['ip', 'addr'], text=True)
+                            for line in output.splitlines():
+                                if 'inet ' in line and '127.0.0.1' not in line:
+                                    ip = line.split()[1].split('/')[0]
+                                    break
+                except Exception as e:
+                    self.log_message(f"Error fetching local IP: {e}")
+            
+            if ip is None or ip.startswith("127."):
+                # As a last resort, try to get the hostname IP
                 ip = socket.gethostbyname(socket.gethostname())
+            
             return ip
+
+
 
         def quit_app(self, instance):
             """Quit the application."""
