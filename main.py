@@ -811,7 +811,7 @@ try:
             layout.add_widget(self.ip_label)
 
             # Directory Input Layout
-            dir_input_layout = BoxLayout(orientation='horizontal', spacing=dp(10), size_hint_y=None, height=dp(50))
+            dir_input_layout = BoxLayout(orientation='horizontal', spacing=dp(10), size_hint_y=None, height=dp(35))
 
             # Directory Input Text Field
             self.directory_input = TextInput(
