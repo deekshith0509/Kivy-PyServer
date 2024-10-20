@@ -1135,7 +1135,7 @@ try:
         def check_permissions(self):
             if platform == 'android': ##########################experimental android has to be replaced.
                 from android.permissions import request_permissions, Permission
-                request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.INTERNET, Permission.MANAGE_EXTERNAL_STORAGE])
+                request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.INTERNET])
 
 
     if __name__ == '__main__':
