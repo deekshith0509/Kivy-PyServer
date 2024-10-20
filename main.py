@@ -1121,7 +1121,7 @@ try:
             self.permission_handler = WSLCompatiblePermissions()
             # Request permissions when the app starts, but only on Android
             if platform == 'android':
-                Clock.schedule_once(lambda dt: self.permission_handler.check_and_request_permissions(), 0)
+                self.check_permissions()
             # Rest of your app initialization
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
@@ -1132,6 +1132,10 @@ try:
             # Get the current log screen and call its log_output method
             log_screen = self.sm.get_screen('logs')
             log_screen.log_output(message)
+        def check_permissions(self):
+            if platform == 'android': ##########################experimental android has to be replaced.
+                from android.permissions import request_permissions, Permission
+                request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.INTERNET, Permission.MANAGE_EXTERNAL_STORAGE])
 
 
     if __name__ == '__main__':
