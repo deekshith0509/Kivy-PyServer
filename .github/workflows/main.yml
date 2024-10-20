@@ -61,12 +61,12 @@ jobs:
             zlib1g-dev
       - name: Build APK
         run: |
-          yes | buildozer android debug
+          yes | buildozer android release
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
           name: PyServer
-          path: bin/*.apk
+          path: bin/*
       - name: Upload build logs
         if: failure()
         uses: actions/upload-artifact@v3
