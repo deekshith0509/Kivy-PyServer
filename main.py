@@ -1148,30 +1148,11 @@ try:
         def request_permissions(self):
             required_permissions = [
                 Permission.WRITE_EXTERNAL_STORAGE,
-                Permission.READ_EXTERNAL_STORAGE,
-                "android.permission.MANAGE_EXTERNAL_STORAGE"
-            ]
+                Permission.READ_EXTERNAL_STORAGE   ]
 
-            request_permissions(required_permissions, self.permission_callback)
+            request_permissions(required_permissions)
 
-        def permission_callback(self, permissions, grants):
-            if all(grants):
-                self.log_output("All permissions granted")
-            else:
-                self.log_output("Not all permissions granted")
-                self.show_permission_instructions()
-
-        def show_permission_instructions(self):
-            Intent = autoclass('android.content.Intent')
-            activity = autoclass('org.kivy.android.PythonActivity').mActivity
-
-            # Launch ManageExternalStorageActivity
-            intent = Intent()
-            intent.setClassName("com.android.settings", "com.android.settings.Settings$ManageExternalStorageActivity")
-            activity.startActivity(intent)
-
-            self.log_output("Please enable Manage External Storage permission in settings")
-
+        
 
 
     if __name__ == '__main__':
