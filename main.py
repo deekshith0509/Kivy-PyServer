@@ -745,14 +745,23 @@ try:
         global httpd
         PORT = 8000
         os.chdir(directory)
-
-        try:
-            log_message(f"Serving HTTP on port {PORT} from {directory}...")
-            httpd = socketserver.TCPServer(("", PORT), DirectoryListingHandler)
-            httpd.serve_forever()
-        except OSError as e:
-            log_message(f"Error starting server: {e}")
-            
+    
+        while True:
+            try:
+                log_message(f"Attempting to serve HTTP on port {PORT} from {directory}...")
+                httpd = socketserver.TCPServer(("", PORT), DirectoryListingHandler)
+                log_message(f"Server started successfully on port {PORT}")
+                httpd.serve_forever()
+            except OSError as e:
+                if e.errno == 98:  # Address already in use
+                    log_message(f"Port {PORT} is in use, trying the next one...")
+                    PORT += 1
+                else:
+                    log_message(f"Error starting server: {e}")
+                    break
+            except Exception as e:
+                log_message(f"Unexpected error starting server: {e}")
+                break
 
     class MainScreen(Screen):
         qr_image = ObjectProperty(None)
@@ -921,21 +930,18 @@ try:
         def stop_server(self):
             if self.httpd:
                 try:
-                    print("Stopping server...")
+                    log_message("Stopping server...")
                     self.httpd.shutdown()
-                    self.httpd.server_close()
-                    if self.server_thread:
-                        self.server_thread.join()
+                    self.httpd.server_close()  # Add this line
                     self.httpd = None
-                    self.server_thread = None
                     self.server_running = False
                     self.button_start_stop.text = "Start Server"
-                    print("Server stopped.")
+                    log_message("Server stopped.")
                     self.qr_image.texture = None
                     self.ip_label.text = "IP:Port will appear here"
                     self.ip_label.bind(on_touch_down=self.open_link)
                 except Exception as e:
-                    print(f"Error stopping server: {e}")
+                    log_message(f"Error stopping server: {e}")
     
         def select_directory(self, path):
             if self.server_running:
@@ -944,6 +950,11 @@ try:
             self.close_file_manager()
     
         def start_server(self, directory):
+            if self.httpd:
+                self.stop_server()
+        
+            self.server_thread = threading.Thread(target=start_http_server, args=(directory,), daemon=True)
+            self.server_thread.start()
             if self.server_running:
                 self.stop_server()
     
