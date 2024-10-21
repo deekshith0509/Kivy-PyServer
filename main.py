@@ -881,116 +881,112 @@ try:
 
             self.add_widget(layout)
 
-        # Add this method to handle the "Enter" button action
-
         def enter_directory(self, instance):
-            """Get the directory input from the user and start the server."""
-            directory = self.directory_input.text.strip()  # Get the input from the TextInput
-            if directory:  # Check if the directory is not empty
-                if os.path.isdir(directory):  # Check if the directory is valid
-                    self.start_server(directory)  # Start the server with the entered directory
-                    self.directory_input.text = ""  # Clear the input field after submission
+            directory = self.directory_input.text.strip()
+            if directory:
+                if os.path.isdir(directory):
+                    self.start_server(directory)
+                    self.directory_input.text = ""
                 else:
-                    self.show_error_dialog("Please enter a valid directory path.")  # Show a message if the directory is invalid
+                    self.show_error_dialog("Please enter a valid directory path.")
             else:
-                self.show_error_dialog("Please enter a directory path.")  # Show a message if the directory is empty
-
+                self.show_error_dialog("Please enter a directory path.")
+    
         def show_error_dialog(self, message):
-            """Display a modern MDDialog with the provided message."""
             self.dialog = MDDialog(
                 text=message,
-                buttons=[
-                    MDRaisedButton(
-                        text="OK",
-                        on_release=lambda x: self.dialog.dismiss()
-                    )
-                ]
+                buttons=[MDRaisedButton(text="OK", on_release=lambda x: self.dialog.dismiss())]
             )
             self.dialog.open()
+
 
         def _update_rect(self, instance, value):
             self.rect.pos = instance.pos
             self.rect.size = instance.size
 
+
+
         def open_link(self, instance, touch):
-            """Open the URL in a web browser when the label is clicked."""
             if instance.collide_point(touch.x, touch.y) and self.server_running:
-                if self.current_ip and self.current_port:  # Ensure IP and port are set
-                    url = f"http://{self.current_ip}:{self.current_port}"  # Construct URL
-                    webbrowser.open(url)  # Open URL in web browser
-
+                if self.current_ip and self.current_port:
+                    url = f"http://{self.current_ip}:{self.current_port}"
+                    webbrowser.open(url)
+    
         def toggle_server(self, instance):
-            """Toggle the server on and off."""
             if self.server_running:
-                self.stop_server()  # Stop the server if it's running
+                self.stop_server()
             else:
-                self.enter_directory(instance)  # Trigger the enter_directory method if server is not running
-
-
-
+                self.enter_directory(instance)
+    
         def stop_server(self):
-            global httpd
-            if httpd:
+            if self.httpd:
                 try:
-                    log_message("Stopping server...")
-                    httpd.shutdown()  # Stop the server
-                    httpd = None  # Reset the server variable
+                    print("Stopping server...")
+                    self.httpd.shutdown()
+                    self.httpd.server_close()
+                    if self.server_thread:
+                        self.server_thread.join()
+                    self.httpd = None
+                    self.server_thread = None
                     self.server_running = False
-                    self.button_start_stop.text = "Start Server"  # Update button text
-                    log_message("Server stopped.")
+                    self.button_start_stop.text = "Start Server"
+                    print("Server stopped.")
                     self.qr_image.texture = None
                     self.ip_label.text = "IP:Port will appear here"
-                    self.ip_label.bind(on_touch_down=self.open_link)  # Rebind to make it clickable again
+                    self.ip_label.bind(on_touch_down=self.open_link)
                 except Exception as e:
-                    log_message(f"Error stopping server: {e}")
-                    
-                    
+                    print(f"Error stopping server: {e}")
+    
         def select_directory(self, path):
-            """Select a directory to serve."""
             if self.server_running:
-                self.stop_server()  # Stop the current server if running
-            self.start_server(path)  # Start server with the selected path
-            self.close_file_manager()  # Close the file manager
-
+                self.stop_server()
+            self.start_server(path)
+            self.close_file_manager()
+    
         def start_server(self, directory):
-            """Start the HTTP server with the selected directory."""
-            global httpd
-            if httpd:
-                self.stop_server()  # Stop existing server if running
-
-            threading.Thread(target=start_http_server, args=(directory,), daemon=True).start()
-            self.current_ip = self.get_local_ip()  # Update the current IP
-            qr_texture = self.generate_qr_code(f"http://{self.current_ip}:{self.current_port}")
+            if self.server_running:
+                self.stop_server()
+    
+            self.current_ip = self.get_local_ip()
+            self.server_thread = threading.Thread(target=self.run_server, args=(directory,), daemon=True)
+            self.server_thread.start()
             
+            qr_texture = self.generate_qr_code(f"http://{self.current_ip}:{self.current_port}")
             if qr_texture:
                 self.qr_image.texture = qr_texture
                 self.qr_image.size = qr_texture.size
-                self.q_image.canvas.ask_update()
-            else:
-                pass
+                self.qr_image.canvas.ask_update()
             
-            self.update_ip_label()  # Update the IP label
+            self.update_ip_label()
             self.server_running = True
-            self.button_start_stop.text = "Stop Server"  # Update button text
+            self.button_start_stop.text = "Stop Server"
+    
+        def run_server(self, directory):
+            import http.server
+            import socketserver
+    
+            os.chdir(directory)
+            handler = http.server.SimpleHTTPRequestHandler
+            self.httpd = socketserver.TCPServer(("", self.current_port), handler)
+            print(f"Serving HTTP on {self.current_ip}:{self.current_port} from {directory}")
+            self.httpd.serve_forever()
 
         def update_ip_label(self):
-            """Update the IP address and port label."""
-            self.ip_label.text = f"{self.current_ip}:{self.current_port}"  # Update the label with current IP and port
-            self.ip_label.color = get_color_from_hex("#0000FF")  # Reset color to indicate it's clickable
-            self.ip_label.bind(on_touch_down=self.open_link)  # Re-bind the click event
-
+            self.ip_label.text = f"{self.current_ip}:{self.current_port}"
+            self.ip_label.color = (0, 0, 1, 1)  # Blue color
+            self.ip_label.bind(on_touch_down=self.open_link)
+    
         def open_filechooser(self, instance):
-            """Open the file chooser for directory selection."""
             self.file_manager = MDFileManager(
                 exit_manager=self.close_file_manager,
                 select_path=self.select_directory,
             )
-            self.file_manager.show('/')  # Show the file manager at the root directory
-
+            self.file_manager.show('/')
+    
         def close_file_manager(self, *args):
-            """Close the file manager."""
             if self.file_manager:
                 self.file_manager.close()
+
 
         def get_local_ip(self):
             """Fetch the local IP address."""
