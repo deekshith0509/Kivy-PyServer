@@ -75,11 +75,6 @@ from kivy.utils import platform
 from kivy.clock import Clock
 
 try:
-    if platform == 'android':
-        import android.os.Process
-        Process = autoclass('android.os.Process')
-        def force_stop_app():
-            Process.killProcess(Process.myPid())
     class WSLCompatiblePermissions:
         def __init__(self):
             self.permissions = [
@@ -1129,8 +1124,7 @@ try:
     class FileShareApp(MDApp):
         def build(self):
             # Request permissions when the app starts, but only on Android
-            if platform == 'android':
-                self.request_permissions()
+          
             # Rest of your app initialization
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
@@ -1147,8 +1141,7 @@ try:
 
         def request_permissions(self):
             required_permissions = [
-                Permission.WRITE_EXTERNAL_STORAGE,
-                Permission.READ_EXTERNAL_STORAGE   ]
+                Permission.WRITE_EXTERNAL_STORAGE, Permission.INTERNET  ]
 
             request_permissions(required_permissions)
 
