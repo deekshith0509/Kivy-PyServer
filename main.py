@@ -247,23 +247,6 @@ try:
             ]
 
 
-        def check_and_request_permissions(self):
-            if platform == 'android':
-                from android.permissions import request_permissions, check_permission, Permission
-
-                permissions_to_request = []
-                for permission in self.permissions:
-                    if not check_permission(permission):
-                        permissions_to_request.append(permission)
-
-                if permissions_to_request:
-                    request_permissions(permissions_to_request, self.permission_callback)
-
-        def permission_callback(self, permissions, grant_results):
-            if all(grant_results):
-                print("All permissions granted")
-            else:
-                print("Some permissions were denied")
 
     class DirectoryListingHandler(http.server.SimpleHTTPRequestHandler):
 
@@ -755,8 +738,7 @@ try:
                 httpd.server_close()  # Close the server socket
                 httpd = None  # Reset the server variable
                 log_message("Server stopped.")
-                if platform == 'android':
-                    force_stop_app()
+
                 time.sleep(1)
             except Exception as e:
                 log_message(f"Error stopping server: {e}")
@@ -1116,7 +1098,7 @@ try:
                 readonly=True,
                 background_color=(1, 1, 1, 1),
                 foreground_color=(0, 0, 0, 1),
-                font_size=14,
+                font_size=28,
                 hint_text="Logs will appear here...",
                 multiline=True,
             )
@@ -1143,12 +1125,12 @@ try:
             self.log_output_area.cursor = (0, 0)  # Scroll to the bottom
 
 
+
     class FileShareApp(MDApp):
         def build(self):
-            self.permission_handler = WSLCompatiblePermissions()
             # Request permissions when the app starts, but only on Android
             if platform == 'android':
-                self.check_permissions()
+                self.request_permissions()
             # Rest of your app initialization
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
@@ -1159,10 +1141,37 @@ try:
             # Get the current log screen and call its log_output method
             log_screen = self.sm.get_screen('logs')
             log_screen.log_output(message)
-        def check_permissions(self):
-            if platform == 'android': ##########################experimental android has to be replaced.
-                from android.permissions import request_permissions, Permission
-                request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.INTERNET])
+
+
+                
+
+        def request_permissions(self):
+            required_permissions = [
+                Permission.WRITE_EXTERNAL_STORAGE,
+                Permission.READ_EXTERNAL_STORAGE,
+                "android.permission.MANAGE_EXTERNAL_STORAGE"
+            ]
+
+            request_permissions(required_permissions, self.permission_callback)
+
+        def permission_callback(self, permissions, grants):
+            if all(grants):
+                self.log_output("All permissions granted")
+            else:
+                self.log_output("Not all permissions granted")
+                self.show_permission_instructions()
+
+        def show_permission_instructions(self):
+            Intent = autoclass('android.content.Intent')
+            activity = autoclass('org.kivy.android.PythonActivity').mActivity
+
+            # Launch ManageExternalStorageActivity
+            intent = Intent()
+            intent.setClassName("com.android.settings", "com.android.settings.Settings$ManageExternalStorageActivity")
+            activity.startActivity(intent)
+
+            self.log_output("Please enable Manage External Storage permission in settings")
+
 
 
     if __name__ == '__main__':
