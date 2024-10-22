@@ -936,7 +936,7 @@ try:
             if httpd:
                 stop_http_server()  # Stop existing server if running
 
-            threading.Thread(target=start_http_server, args=(directory,), daemon=True).start()
+            start_http_server()
             self.current_ip = self.get_local_ip()  # Update the current IP
             qr_texture = self.generate_qr_code(f"http://{self.current_ip}:{self.current_port}")
             
