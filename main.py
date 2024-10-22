@@ -1147,20 +1147,13 @@ try:
             self.log_output_area.cursor = (0, 0)  # Scroll to the bottom
 
 
+
     class FileShareApp(MDApp):
         def build(self):
             self.permission_handler = WSLCompatiblePermissions()
             # Request permissions when the app starts, but only on Android
             if platform == 'android':
-                from jnius import autoclass, cast
-                from android.permissions import request_permissions, check_permission, Permission
-                from android import activity, mActivity
-
-                # Define Android intent classes
-                Intent = autoclass('android.content.Intent')
-                Settings = autoclass('android.provider.Settings')
-                Uri = autoclass('android.net.Uri')
-                Clock.schedule_once(lambda dt: self.permission_handler.check_and_request_permissions(), 0)
+                self.check_permissions()
             # Rest of your app initialization
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
@@ -1171,43 +1164,33 @@ try:
             # Get the current log screen and call its log_output method
             log_screen = self.sm.get_screen('logs')
             log_screen.log_output(message)
-            
-            
 
-        def check_and_request_permissions(self):
-            if not self.check_manage_external_storage_permission():
-                self.request_manage_external_storage_permission()
-
-        def check_manage_external_storage_permission(self):
+        def check_permissions(self):
             if platform == 'android':
-                # On Android 11 (API level 30) and above, we need MANAGE_EXTERNAL_STORAGE permission
-                try:
-                    PackageManager = autoclass('android.content.pm.PackageManager')
-                    has_permission = mActivity.checkSelfPermission(Permission.MANAGE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-                    return has_permission
-                except Exception as e:
-                    self.log_output(f"Error checking permission: {e}")
-                    return False
-            return True
-
-        def request_manage_external_storage_permission(self):
-            if platform == 'android':
-                # Open the settings to let the user enable the permission
-                intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                uri = Uri.fromParts("package", mActivity.getPackageName(), None)
-                intent.setData(uri)
-                mActivity.startActivity(intent)
-                self.show_permission_message()
-
-        def show_permission_message(self):
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            popup = Popup(title='Permission Required',
-                          content=Label(text='Please enable Manage External Storage permission in settings to use this app.'),
-                          size_hint=(None, None), size=(400, 200))
-            popup.open()
-
-
+                from android.permissions import request_permissions, Permission
+                from android import mActivity, autoclass
+                
+                # Request basic permissions first
+                request_permissions([
+                    Permission.WRITE_EXTERNAL_STORAGE,
+                    Permission.INTERNET
+                ])
+                
+                # Check for Android 11+ (API 30+)
+                Build = autoclass('android.os.Build')
+                if Build.VERSION.SDK_INT >= 30:
+                    Environment = autoclass('android.os.Environment')
+                    Intent = autoclass('android.content.Intent')
+                    Settings = autoclass('android.provider.Settings')
+                    
+                    # Check if we already have all files permission
+                    if not Environment.isExternalStorageManager():
+                        self.log_output("Requesting all files access permission...")
+                        # Create and start the intent for all files access
+                        intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        mActivity.startActivity(intent)
+                    else:
+                        self.log_output("All files access permission already granted")
 
     if __name__ == '__main__':
         FileShareApp().run()
