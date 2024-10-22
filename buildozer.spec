@@ -16,7 +16,7 @@ android.accept_sdk_license = True
 android.api = 33
 android.ndk = 25b
 android.presplash_color = #FFFFFF
-android.permissions = MANAGE_EXTERNAL_STORAGE
+android.permissions = MANAGE_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, INTERNET
 
 # Versioning
 version = 0.2
