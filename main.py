@@ -1152,8 +1152,7 @@ try:
         def build(self):
             self.permission_handler = WSLCompatiblePermissions()
             # Request permissions when the app starts, but only on Android
-            if platform == 'android':
-                self.check_permissions()
+
             # Rest of your app initialization
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
@@ -1165,32 +1164,7 @@ try:
             log_screen = self.sm.get_screen('logs')
             log_screen.log_output(message)
 
-        def check_permissions(self):
-            if platform == 'android':
-                from android.permissions import request_permissions, Permission
-                from android import mActivity, autoclass
-                
-                # Request basic permissions first
-                request_permissions([
-                    Permission.WRITE_EXTERNAL_STORAGE,
-                    Permission.INTERNET
-                ])
-                
-                # Check for Android 11+ (API 30+)
-                Build = autoclass('android.os.Build')
-                if Build.VERSION.SDK_INT >= 30:
-                    Environment = autoclass('android.os.Environment')
-                    Intent = autoclass('android.content.Intent')
-                    Settings = autoclass('android.provider.Settings')
-                    
-                    # Check if we already have all files permission
-                    if not Environment.isExternalStorageManager():
-                        self.log_output("Requesting all files access permission...")
-                        # Create and start the intent for all files access
-                        intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                        mActivity.startActivity(intent)
-                    else:
-                        self.log_output("All files access permission already granted")
+
 
     if __name__ == '__main__':
         FileShareApp().run()
