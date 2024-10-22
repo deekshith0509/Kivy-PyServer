@@ -1,4 +1,3 @@
-import time
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDRaisedButton
 import webbrowser
@@ -75,6 +74,7 @@ from kivy.utils import platform
 from kivy.clock import Clock
 
 try:
+
     class WSLCompatiblePermissions:
         def __init__(self):
             self.permissions = [
@@ -242,6 +242,23 @@ try:
             ]
 
 
+        def check_and_request_permissions(self):
+            if platform == 'android':
+                from android.permissions import request_permissions, check_permission, Permission
+
+                permissions_to_request = []
+                for permission in self.permissions:
+                    if not check_permission(permission):
+                        permissions_to_request.append(permission)
+
+                if permissions_to_request:
+                    request_permissions(permissions_to_request, self.permission_callback)
+
+        def permission_callback(self, permissions, grant_results):
+            if all(grant_results):
+                print("All permissions granted")
+            else:
+                print("Some permissions were denied")
 
     class DirectoryListingHandler(http.server.SimpleHTTPRequestHandler):
 
@@ -712,10 +729,12 @@ try:
     class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         """Handle requests in a separate thread."""
         pass
-        
+    class ReuseAddressHTTPServer(socketserver.TCPServer):
+        allow_reuse_address = True
 
     # Define a global variable for the server
     httpd = None
+    server_thread = None
 
     # Function to log messages
     def log_message(message):
@@ -723,40 +742,19 @@ try:
         if app:
             Clock.schedule_once(lambda dt: app.log_output(message))
 
-
-    def stop_http_server():
-        global httpd
-        if httpd:
-            try:
-                log_message("Stopping server...")
-                httpd.shutdown()  # Stop the server
-                httpd.server_close()  # Close the server socket
-                httpd = None  # Reset the server variable
-                log_message("Server stopped.")
-
-                time.sleep(1)
-            except Exception as e:
-                log_message(f"Error stopping server: {e}")
-
+    # Function to start the HTTP server
     def start_http_server(directory):
         global httpd
-        PORT = 8000  # Starting port
-        os.chdir(directory)  # Change to the specified directory
+        PORT = 8000
+        os.chdir(directory)
 
-        while True:
-            try:
-                log_message(f"Serving HTTP on port {PORT} from {directory}...")
-                httpd = socketserver.TCPServer(("", PORT), DirectoryListingHandler)
-                httpd.serve_forever()  # Start serving requests
-                
-                break  # Exit loop if server starts successfully
-            except OSError as e:
-                log_message(f"Error starting server on port {PORT}: {e}")
-                PORT += 1  # Increment the port number for the next attempt
-
-                if PORT > 65535:  # Check if we exceed the maximum port
-                    log_message("Reached maximum port limit. Unable to start server.")
-                    break  # Optionally break out of the loop
+        try:
+            log_message(f"Serving HTTP on port {PORT} from {directory}...")
+            httpd = ReuseAddressHTTPServer(("", PORT), DirectoryListingHandler)
+            httpd.serve_forever()
+        except OSError as e:
+            log_message(f"Error starting server: {e}")
+            
 
     class MainScreen(Screen):
         qr_image = ObjectProperty(None)
@@ -923,51 +921,78 @@ try:
                     url = f"http://{self.current_ip}:{self.current_port}"  # Construct URL
                     webbrowser.open(url)  # Open URL in web browser
 
+
+
+
+
+
         def toggle_server(self, instance):
             """Toggle the server on and off."""
             if self.server_running:
-                self.stop_server()  # Stop the server if it's running
+                self.stop_server()
             else:
-                self.enter_directory(instance)  # Trigger the enter_directory method if server is not running
+                self.enter_directory(instance)
+
+        def stop_server(self):
+            global httpd, server_thread
+            if httpd:
+                try:
+                    log_message("Stopping server...")
+                    # Shutdown the server
+                    httpd.shutdown()
+                    httpd.server_close()
+                    
+                    # Wait for the server thread to complete
+                    if server_thread and server_thread.is_alive():
+                        server_thread.join(timeout=5)
+                    
+                    # Reset server variables
+                    httpd = None
+                    server_thread = None
+                    
+                    # Update UI
+                    self.server_running = False
+                    self.button_start_stop.text = "Start Server"
+                    self.qr_image.texture = None
+                    self.ip_label.text = "IP:Port will appear here"
+                    self.ip_label.bind(on_touch_down=self.open_link)
+                    
+                    log_message("Server stopped.")
+                except Exception as e:
+                    log_message(f"Error stopping server: {e}")
 
         def start_server(self, directory):
             """Start the HTTP server with the selected directory."""
-            global httpd
-            if httpd:
-                stop_http_server()  # Stop existing server if running
-
-            threading.Thread(target=start_http_server, args=(directory,), daemon=True).start()
-            self.current_ip = self.get_local_ip()  # Update the current IP
-            qr_texture = self.generate_qr_code(f"http://{self.current_ip}:{self.current_port}")
+            global httpd, server_thread
             
+            # Ensure previous server is fully stopped
+            if self.server_running:
+                self.stop_server()
+                # Add a small delay to ensure socket is fully released
+                import time
+                time.sleep(1)
+            
+            # Start new server
+            server_thread = threading.Thread(
+                target=start_http_server,
+                args=(directory,),
+                daemon=True
+            )
+            server_thread.start()
+            
+            # Update UI
+            self.current_ip = self.get_local_ip()
+            qr_texture = self.generate_qr_code(f"http://{self.current_ip}:{self.current_port}")
             if qr_texture:
                 self.qr_image.texture = qr_texture
                 self.qr_image.size = qr_texture.size
-                self.q_image.canvas.ask_update()
+                self.qr_image.canvas.ask_update()
             
-            self.update_ip_label()  # Update the IP label
+            self.update_ip_label()
             self.server_running = True
-            self.button_start_stop.text = "Stop Server"  # Update button text
-            
-        def custom(self):
-            self.current_ip = self.get_local_ip()  # Update the current IP
-            qr_texture = self.generate_qr_code(f"http://{self.current_ip}:{self.current_port}")
-            
-            if qr_texture:
-                self.qr_image.texture = qr_texture
-                self.qr_image.size = qr_texture.size
-                self.q_image.canvas.ask_update()
-            
-            self.update_ip_label()  # Update the IP label
-            
-        def stop_server(self):
-            """Stop the HTTP server."""
-            stop_http_server()
-            self.server_running = False
-            self.button_start_stop.text = "Start Server"  # Update button text
-            self.qr_image.texture = None  # Clear QR code image
-            self.ip_label.text = "IP:Port will appear here"  # Reset IP label
-            
+            self.button_start_stop.text = "Stop Server"
+        
+        
 
         def select_directory(self, path):
             """Select a directory to serve."""
@@ -975,6 +1000,9 @@ try:
                 self.stop_server()  # Stop the current server if running
             self.start_server(path)  # Start server with the selected path
             self.close_file_manager()  # Close the file manager
+
+
+
 
         def update_ip_label(self):
             """Update the IP address and port label."""
@@ -1037,7 +1065,6 @@ try:
 
         def quit_app(self, instance):
             """Quit the application."""
-            httpd.shutdown()
             App.get_running_app().stop()  # Terminate the application
 
 
@@ -1093,7 +1120,7 @@ try:
                 readonly=True,
                 background_color=(1, 1, 1, 1),
                 foreground_color=(0, 0, 0, 1),
-                font_size=28,
+                font_size=14,
                 hint_text="Logs will appear here...",
                 multiline=True,
             )
@@ -1120,11 +1147,20 @@ try:
             self.log_output_area.cursor = (0, 0)  # Scroll to the bottom
 
 
-
     class FileShareApp(MDApp):
         def build(self):
+            self.permission_handler = WSLCompatiblePermissions()
             # Request permissions when the app starts, but only on Android
-          
+            if platform == 'android':
+                from jnius import autoclass, cast
+                from android.permissions import request_permissions, check_permission, Permission
+                from android import activity, mActivity
+
+                # Define Android intent classes
+                Intent = autoclass('android.content.Intent')
+                Settings = autoclass('android.provider.Settings')
+                Uri = autoclass('android.net.Uri')
+                Clock.schedule_once(lambda dt: self.permission_handler.check_and_request_permissions(), 0)
             # Rest of your app initialization
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
@@ -1135,17 +1171,42 @@ try:
             # Get the current log screen and call its log_output method
             log_screen = self.sm.get_screen('logs')
             log_screen.log_output(message)
+            
+            
 
+        def check_and_request_permissions(self):
+            if not self.check_manage_external_storage_permission():
+                self.request_manage_external_storage_permission()
 
-                
+        def check_manage_external_storage_permission(self):
+            if platform == 'android':
+                # On Android 11 (API level 30) and above, we need MANAGE_EXTERNAL_STORAGE permission
+                try:
+                    PackageManager = autoclass('android.content.pm.PackageManager')
+                    has_permission = mActivity.checkSelfPermission(Permission.MANAGE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    return has_permission
+                except Exception as e:
+                    self.log_output(f"Error checking permission: {e}")
+                    return False
+            return True
 
-        def request_permissions(self):
-            required_permissions = [
-                Permission.WRITE_EXTERNAL_STORAGE, Permission.INTERNET  ]
+        def request_manage_external_storage_permission(self):
+            if platform == 'android':
+                # Open the settings to let the user enable the permission
+                intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                uri = Uri.fromParts("package", mActivity.getPackageName(), None)
+                intent.setData(uri)
+                mActivity.startActivity(intent)
+                self.show_permission_message()
 
-            request_permissions(required_permissions)
+        def show_permission_message(self):
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            popup = Popup(title='Permission Required',
+                          content=Label(text='Please enable Manage External Storage permission in settings to use this app.'),
+                          size_hint=(None, None), size=(400, 200))
+            popup.open()
 
-        
 
 
     if __name__ == '__main__':
