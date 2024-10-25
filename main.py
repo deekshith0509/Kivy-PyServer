@@ -73,6 +73,25 @@ from PIL import Image as PILImage
 from kivy.utils import platform
 from kivy.clock import Clock
 
+
+from kivy.utils import platform
+from kivy.clock import Clock
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.button import MDFlatButton
+
+if platform == 'android':
+    from android.permissions import request_permissions, Permission, check_permission
+    from android.storage import primary_external_storage_path
+    from jnius import autoclass, cast
+
+    # Required Android classes
+    Build = autoclass('android.os.Build')
+    Environment = autoclass('android.os.Environment')
+    Intent = autoclass('android.content.Intent')
+    Settings = autoclass('android.provider.Settings')
+    Uri = autoclass('android.net.Uri')
+    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+    PackageManager = autoclass('android.content.pm.PackageManager')
 try:
 
     class WSLCompatiblePermissions:
@@ -1150,9 +1169,6 @@ try:
 
     class FileShareApp(MDApp):
         def build(self):
-            self.permission_handler = WSLCompatiblePermissions()
-            # Request permissions when the app starts, but only on Android
-
             # Rest of your app initialization
             self.sm = ScreenManager()
             self.sm.add_widget(MainScreen(name='main'))
@@ -1165,7 +1181,67 @@ try:
             log_screen.log_output(message)
 
 
+        def check_and_request_storage_permissions(self):
+            if platform =='linux':
+                return
+                
+            if not Environment.isExternalStorageManager():
+                self.show_storage_permission_dialog()
+            else:
+                print("Already have all files access permission")
+            return True
 
+        def show_storage_permission_dialog(self):
+            """Show dialog explaining why we need storage permission"""
+            dialog = MDDialog(
+                title="Storage Permission Required",
+                text="This app needs permission to manage files in external storage. Please enable 'Allow all files access' in the next screen.",
+                buttons=[
+                    MDFlatButton(
+                        text="CANCEL",
+                        on_release=lambda x: dialog.dismiss()
+                    ),
+                    MDFlatButton(
+                        text="SETTINGS",
+                        on_release=lambda x: self.open_all_files_settings()
+                    ),
+                ],
+            )
+            dialog.open()
+
+        def open_all_files_settings(self):
+            """Open Android settings for all files access"""
+            if platform == 'android':
+                activity = PythonActivity.mActivity
+                
+                # Create intent for "All files access" settings page
+                intent = Intent()
+                intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                
+                # Set package URI
+                uri = Uri.fromParts("package", "com.share.server", None)
+                intent.setData(uri)
+                
+                # Start the settings activity
+                activity.startActivity(intent)
+                
+                # Schedule a check after returning from settings
+                Clock.schedule_once(self.check_permission_after_return, 1)
+
+        def check_permission_after_return(self, dt):
+            """Check if permission was granted after returning from settings"""
+            if platform == 'android':
+                if Environment.isExternalStorageManager():
+                    print("All files access permission granted!")
+                    # Proceed with your file operations
+                    self.initialize_storage()
+                else:
+                    print("All files access permission not granted")
+                    # Optionally show another dialog or handle denial
+
+        def on_start(self):
+            """Check permissions when app starts"""
+            self.check_and_request_storage_permissions()
     if __name__ == '__main__':
         FileShareApp().run()
 
