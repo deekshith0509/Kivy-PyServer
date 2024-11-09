@@ -1,83 +1,37 @@
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDRaisedButton
-import webbrowser
-from kivy.core.window import Window
-
-from kivy.utils import get_color_from_hex
 import os
 import socket
 import platform
-import subprocess
 import threading
-import http.server
-import socketserver
-import urllib.parse
 import datetime
+import subprocess
+import webbrowser
+from io import BytesIO
 import qrcode
-from kivymd.app import MDApp
+from PIL import Image as PILImage
+
+from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.image import Image
 from kivy.uix.popup import Popup
 from kivy.uix.textinput import TextInput
-from kivy.graphics import Color, Rectangle
-from kivy.metrics import dp
-from kivy.core.window import Window
-from kivy.clock import Clock
-from kivy.uix.filechooser import FileChooser
-from kivy.uix.filechooser import FileChooserListView
-from kivy.graphics.texture import Texture
-from kivy.core.image import Image as CoreImage
-from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.screenmanager import ScreenManager, Screen
-from plyer import filechooser
-import kivy
-from io import BytesIO
-
-from kivy.uix.relativelayout import RelativeLayout  # Add this line
-
 from kivy.uix.gridlayout import GridLayout
-from PIL import Image as PILImage
-
 from kivy.uix.floatlayout import FloatLayout
-
-import os
-import socket
-import threading
-import datetime
-from io import BytesIO
-import qrcode
-from kivy.app import App
-from kivy.lang import Builder
-from kivy.properties import ObjectProperty
-from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.image import Image
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.textinput import TextInput
-from kivy.uix.screenmanager import Screen, ScreenManager
-from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton
-from kivymd.uix.filemanager import MDFileManager
-from kivymd.uix.label import MDLabel
-from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle
 from kivy.graphics.texture import Texture
-from PIL import Image as PILImage
-
-from kivy.utils import platform
+from kivy.core.window import Window
 from kivy.clock import Clock
-
-
-from kivy.utils import platform
-from kivy.clock import Clock
+from kivy.utils import get_color_from_hex, platform
+from kivymd.app import MDApp
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDFlatButton
+from kivymd.uix.button import MDRaisedButton, MDFlatButton
+from kivymd.uix.label import MDLabel
+from kivymd.uix.filemanager import MDFileManager
+from plyer import filechooser
+from kivy.core.image import Image as CoreImage
 
 if platform == 'android':
     from android.permissions import request_permissions, Permission, check_permission
