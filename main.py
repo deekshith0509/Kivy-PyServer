@@ -1,3 +1,9 @@
+import urllib
+from kivy.uix.relativelayout import RelativeLayout
+from kivy.metrics import dp 
+import http.server
+import socketserver
+from kivy.properties import ObjectProperty
 import os
 import socket
 import platform
@@ -33,6 +39,7 @@ from kivymd.uix.filemanager import MDFileManager
 from plyer import filechooser
 from kivy.core.image import Image as CoreImage
 
+print("platfrom is ", platform)
 if platform == 'android':
     from android.permissions import request_permissions, Permission, check_permission
     from android.storage import primary_external_storage_path
@@ -1007,7 +1014,7 @@ try:
                 s.close()
             except Exception:
                 try:
-                    if platform.system() == "Windows":
+                    if platform.system() == "win":
                         output = subprocess.check_output(['ipconfig'], text=True)
                         for line in output.splitlines():
                             if 'IPv4 Address' in line:
@@ -1136,7 +1143,7 @@ try:
 
 
         def check_and_request_storage_permissions(self):
-            if platform =='linux':
+            if platform =='linux'or platform == 'win':
                 return
                 
             if not Environment.isExternalStorageManager():
