@@ -1199,5 +1199,5 @@ try:
     if __name__ == '__main__':
         FileShareApp().run()
 
-except:
-    pass
+except Exception as e:
+    print(e)
