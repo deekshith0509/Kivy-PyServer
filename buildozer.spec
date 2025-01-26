@@ -5,7 +5,7 @@ package.domain = com.share
 source.main = main.py
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,dm
-requirements = python3,kivy,qrcode,plyer,kivymd==2.0.0,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi
+requirements = python3,kivy,qrcode,plyer,https://github.com/kivymd/KivyMD/archive/master.zip,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi
 orientation = portrait
 presplash.filename = presplash.png  
 icon.filename = icon.png
