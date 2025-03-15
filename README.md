@@ -1,11 +1,11 @@
 # FileShareApp-PyServer
 
+<p align="center">
+  <img src="Images/start.jpg" alt="FileShareApp UI" width="300">
+  <img src="Images/UI.jpg" alt="FileShareApp UI" width="300">
+  <img src="Images/UI1.jpg" alt="FileShareApp UI" width="300">
+</p>
 
-![FileShareApp UI](Images/start.jpg)
-
-![FileShareApp UI](Images/UI.jpg)
-
-![FileShareApp UI](Images/UI1.jpg)
 
 
 FileShareApp is a cross-platform file sharing application designed to simplify the process of sharing files over a network. This application supports all major operating systems, including Linux, Windows, and Android, making it an ideal choice for organizations seeking a flexible and user-friendly solution for file sharing.
