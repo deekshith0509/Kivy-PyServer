@@ -1,9 +1,9 @@
 # FileShareApp-PyServer
 
 <p align="center">
-  <img src="Images/start.jpg" alt="FileShareApp UI" width="300">
-  <img src="Images/UI.jpg" alt="FileShareApp UI" width="300">
-  <img src="Images/UI1.jpg" alt="FileShareApp UI" width="300">
+  <img src="Images/start.jpg" alt="FileShareApp UI" width="250">
+  <img src="Images/UI.jpg" alt="FileShareApp UI" width="250">
+  <img src="Images/UI1.jpg" alt="FileShareApp UI" width="250">
 </p>
 
 
