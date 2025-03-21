@@ -1,3 +1,4 @@
+from urllib.parse import unquote
 import urllib
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.metrics import dp 
@@ -475,10 +476,11 @@ try:
                 # Actions
                 self.wfile.write(b"""
                     <div class="actions">
-                        <form method="POST" action="/create_directory" class="action-form">
+                        <form method="POST" action="/create_directory" class="action-form" enctype="multipart/form-data">
                             <input type="text" name="dirname" placeholder="New Directory Name" required>
                             <input type="submit" value="Create Directory">
                         </form>
+
                         <form method="POST" action="/upload" enctype="multipart/form-data" class="action-form">
                             <input type="file" name="file" required>
                             <input type="submit" value="Upload File">
@@ -570,6 +572,9 @@ try:
             else:
                 self.send_error(404, "File not found.")
 
+
+
+
         def handle_upload(self):
             """Handle file upload."""
             content_length = int(self.headers['Content-Length'])
@@ -643,33 +648,46 @@ try:
                     break
             return filename
 
+
+
+
         def handle_create_directory(self):
             """Handle directory creation."""
-            form = self.parse_multipart_form_data()
+            form = self.parse_multipart_form_data()  # This must exist inside the class
             if 'dirname' not in form:
                 self.send_error(400, "Directory name not provided.")
                 return
-            
+
             dirname = form['dirname'][0]
             os.makedirs(os.path.join(os.getcwd(), dirname), exist_ok=True)
-            
+
             self.send_response(302)  # Redirect after directory creation
             self.send_header('Location', '/')
             self.end_headers()
 
         def parse_multipart_form_data(self):
             """Parse multipart form data from the request."""
-            boundary = self.headers['Content-Type'].split("=")[1].encode()
-            content_length = int(self.headers['Content-Length'])
-            body = self.rfile.read(content_length)
+            content_type = self.headers.get('Content-Type', '')
 
+            if 'boundary=' not in content_type:
+                self.send_error(400, "Invalid Content-Type header")
+                return {}
+
+            boundary = content_type.split("boundary=")[1].encode()
+            content_length = int(self.headers.get('Content-Length', 0))
+
+            if content_length <= 0:
+                self.send_error(400, "No content received")
+                return {}
+
+            body = self.rfile.read(content_length)
             parts = body.split(boundary)
             form_data = {}
 
             for part in parts:
-                if not part or part == b'--' or part == b'--\r\n':
+                if not part or part in [b'--', b'--\r\n']:
                     continue
-                
+
                 if b'Content-Disposition' in part:
                     header, data = part.split(b'\r\n\r\n', 1)
                     disposition = header.decode()
@@ -684,7 +702,7 @@ try:
                     else:
                         value = data.rstrip(b'\r\n--').decode()
                         form_data[name] = [value]
-            
+
             return form_data
 
         def get_disposition_value(self, disposition, attribute):
@@ -693,6 +711,7 @@ try:
                 if attribute in part:
                     return part.split('=')[1].strip(' "')
             return None
+
 
         def format_date_time(self, timestamp):
             """Format timestamp to a readable date-time string."""
