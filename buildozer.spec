@@ -43,3 +43,7 @@ android.logcat = True
 # CI/CD specific settings
 android.deploy = false
 android.accept_sdk_license = True
+# At the end of your [app] section or anywhere before building
+android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
+android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653
+
