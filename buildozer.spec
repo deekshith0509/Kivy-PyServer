@@ -21,6 +21,7 @@ android.release_artifact = apk
 android.accept_sdk_license = True
 android.api = 33
 android.ndk = 25.2.9519653
+android.sdk = 33
 android.sdk.build_tools = 33.0.2
 android.presplash_color = #FFFFFF
 android.permissions = MANAGE_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, INTERNET, READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, READ_MEDIA_AUDIO
@@ -30,6 +31,7 @@ android.java_version = 17
 
 # Versioning
 version = 0.2
+
 # Set to 0 for release builds
 debug = 1
 
@@ -43,7 +45,7 @@ android.logcat = True
 # CI/CD specific settings
 android.deploy = false
 android.accept_sdk_license = True
-# At the end of your [app] section or anywhere before building
+
+# SDK and NDK paths - these are critical
 android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
 android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653
-
