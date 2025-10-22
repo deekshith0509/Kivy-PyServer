@@ -1,15 +1,3 @@
-"""
-Enhanced PyServer - Modern HTTP File Server with Kivy/KivyMD
-Features:
-- Async server operations
-- Better error handling
-- Modern Material Design UI
-- Enhanced permissions handling
-- Improved logging system
-- QR code generation
-- File upload/download support
-"""
-
 import os
 import sys
 import socket
