@@ -32,7 +32,7 @@ android.java_version = 17
 version = 0.2
 debug = 1
 
-# SDK and NDK paths - CRITICAL
+# SDK and NDK paths
 android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
 android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653
 
