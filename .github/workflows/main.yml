@@ -2,29 +2,27 @@ name: CI
 on:
   push:
     branches: [main]
-
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
       # Checkout code
       - name: Checkout Code
         uses: actions/checkout@v3
-
+      
       # Set up Java 17
       - name: Set up Java 17
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
-
+      
       # Set up Python 3.10
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
+      
       # Install Buildozer and dependencies
       - name: Install Buildozer dependencies
         run: |
@@ -34,7 +32,7 @@ jobs:
             libsqlite3-dev libgdbm-compat-dev curl
           python3 -m pip install --upgrade pip setuptools
           python3 -m pip install "Cython<3.0.0" buildozer
-
+      
       # Install Android SDK and NDK
       - name: Install Android SDK and NDK
         run: |
@@ -45,37 +43,53 @@ jobs:
           rm cmdline-tools.zip
           mkdir -p android-sdk/cmdline-tools
           mv cmdline-tools android-sdk/cmdline-tools/latest
-
           export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-
           yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
           yes | sdkmanager --sdk_root=$ANDROID_HOME \
               "platform-tools" "build-tools;33.0.2" "platforms;android-33" "ndk;25.2.9519653"
-
-          echo "ANDROIDSDK=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROIDNDK=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
-
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+      
       # Initialize Buildozer if needed
       - name: Initialize Buildozer
         run: |
           if [ ! -f buildozer.spec ]; then
             buildozer init
           fi
-
-      # Update buildozer.spec with SDK/NDK paths
-      - name: Set SDK and NDK paths in buildozer.spec
+      
+      # Create proper Buildozer configuration
+      - name: Configure Buildozer
         run: |
-          grep -q "^android.sdk_path" buildozer.spec || echo "android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk" >> buildozer.spec
-          grep -q "^android.ndk_path" buildozer.spec || echo "android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> buildozer.spec
-          grep "android.*_path" buildozer.spec
-
+          # Create buildozer configuration directory
+          mkdir -p ~/.buildozer
+          
+          # Update buildozer.spec with correct paths
+          sed -i '/^android.sdk_path/d' buildozer.spec
+          sed -i '/^android.ndk_path/d' buildozer.spec
+          echo "android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk" >> buildozer.spec
+          echo "android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> buildozer.spec
+          
+          # Also set in environment for good measure
+          echo "export ANDROIDSDK=/home/runner/.buildozer/android/platform/android-sdk" >> ~/.bashrc
+          echo "export ANDROIDNDK=/home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> ~/.bashrc
+          source ~/.bashrc
+      
       # Build the APK
       - name: Build Android APK
         run: |
-          export PATH=$ANDROIDSDK/cmdline-tools/latest/bin:$PATH
+          export ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          
+          # Force Buildozer to use existing NDK
+          buildozer android clean
+          buildozer android update
           buildozer android debug
-
+      
       # Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
