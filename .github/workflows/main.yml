@@ -6,24 +6,20 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # Checkout code
       - name: Checkout Code
         uses: actions/checkout@v3
-      
-      # Set up Java 17
+
       - name: Set up Java 17
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
-      
-      # Set up Python 3.10
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      
-      # Install Buildozer and dependencies
+
       - name: Install Buildozer dependencies
         run: |
           sudo apt update && sudo apt install -y \
@@ -32,8 +28,7 @@ jobs:
             libsqlite3-dev libgdbm-compat-dev curl
           python3 -m pip install --upgrade pip setuptools
           python3 -m pip install "Cython<3.0.0" buildozer
-      
-      # Install Android SDK and NDK
+
       - name: Install Android SDK and NDK
         run: |
           mkdir -p ~/.buildozer/android/platform
@@ -52,52 +47,41 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
-      
-      # Initialize Buildozer if needed
+
       - name: Initialize Buildozer
         run: |
           if [ ! -f buildozer.spec ]; then
             buildozer init
           fi
-      
-      # Configure Buildozer with proper paths
+
       - name: Configure Buildozer
         run: |
-          # Update buildozer.spec with correct paths
-          cat >> buildozer.spec << EOF
+          echo "" >> buildozer.spec
+          echo "# Android SDK and NDK paths" >> buildozer.spec
+          echo "android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk" >> buildozer.spec
+          echo "android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> buildozer.spec
 
-# Android SDK and NDK paths
-android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
-android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653
-EOF
-      
-      # Initialize python-for-android first
       - name: Initialize python-for-android
         run: |
           export ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          
-          # Create the directory structure manually first
+
           mkdir -p .buildozer/android/platform/python-for-android
-          
-          # Run a simple buildozer command to initialize p4a
+
           buildozer android --version || true
           buildozer android list_targets || true
-      
-      # Build the APK
+
       - name: Build Android APK
         run: |
           export ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          
-          # Build the APK
+
           buildozer -v android debug
-      
-      # Upload APK artifact
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
