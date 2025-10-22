@@ -9,8 +9,8 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      ANDROIDSDK: ${{ runner.home }}/.buildozer/android/platform/android-sdk
-      ANDROIDNDK: ${{ runner.home }}/.buildozer/android/platform/android-sdk/ndk/25.2.9519653
+      ANDROIDSDK: ${{ env.HOME }}/.buildozer/android/platform/android-sdk
+      ANDROIDNDK: ${{ env.HOME }}/.buildozer/android/platform/android-sdk/ndk/25.2.9519653
 
     steps:
       # 1️⃣ Checkout repository
@@ -43,6 +43,8 @@ jobs:
       # 5️⃣ Install Android SDK and NDK manually
       - name: Install Android SDK and NDK
         run: |
+          export ANDROIDSDK=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROIDNDK=$ANDROIDSDK/ndk/25.2.9519653
           mkdir -p $ANDROIDSDK
           cd $ANDROIDSDK
 
@@ -51,10 +53,9 @@ jobs:
           unzip -q cmdline-tools.zip
           rm cmdline-tools.zip
 
-          # Correct folder layout for sdkmanager
+          # Correct folder layout
           mkdir -p cmdline-tools/latest
           mv cmdline-tools/* cmdline-tools/latest/
-
           export PATH=$ANDROIDSDK/cmdline-tools/latest/bin:$PATH
 
           # Accept licenses and install components
@@ -62,7 +63,7 @@ jobs:
           yes | sdkmanager --sdk_root=$ANDROIDSDK \
               "platform-tools" "build-tools;33.0.2" "platforms;android-33" "ndk;25.2.9519653"
 
-      # 6️⃣ Optional: Cache Buildozer environment for faster rebuilds
+      # 6️⃣ Optional: Cache Buildozer environment
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
@@ -78,16 +79,16 @@ jobs:
           fi
 
       # 8️⃣ Set SDK and NDK paths in buildozer.spec
-      - name: Configure SDK/NDK paths in buildozer.spec
+      - name: Configure SDK/NDK paths
         run: |
-          grep -q "^android.sdk_path" buildozer.spec || echo "android.sdk_path = $ANDROIDSDK" >> buildozer.spec
-          grep -q "^android.ndk_path" buildozer.spec || echo "android.ndk_path = $ANDROIDNDK" >> buildozer.spec
+          grep -q "^android.sdk_path" buildozer.spec || echo "android.sdk_path = $HOME/.buildozer/android/platform/android-sdk" >> buildozer.spec
+          grep -q "^android.ndk_path" buildozer.spec || echo "android.ndk_path = $HOME/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> buildozer.spec
           grep "android.*_path" buildozer.spec
 
       # 9️⃣ Build Android APK
       - name: Build Android APK
         run: |
-          export PATH=$ANDROIDSDK/cmdline-tools/latest/bin:$PATH
+          export PATH=$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
           buildozer android debug
 
       # 🔟 Upload APK artifact
