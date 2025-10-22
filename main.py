@@ -1,1210 +1,1595 @@
-import urllib
-from kivy.uix.relativelayout import RelativeLayout
-from kivy.metrics import dp 
-import http.server
-import socketserver
-from kivy.properties import ObjectProperty
+"""
+Enhanced PyServer - Modern HTTP File Server with Kivy/KivyMD
+Features:
+- Async server operations
+- Better error handling
+- Modern Material Design UI
+- Enhanced permissions handling
+- Improved logging system
+- QR code generation
+- File upload/download support
+"""
+
 import os
+import sys
 import socket
-import platform
 import threading
 import datetime
 import subprocess
 import webbrowser
+import urllib.parse
 from io import BytesIO
+from pathlib import Path
+from typing import Optional, Callable
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+# HTTP Server imports
+import http.server
+import socketserver
+
+# Image processing
 import qrcode
 from PIL import Image as PILImage
 
+# Kivy imports
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.image import Image
-from kivy.uix.popup import Popup
 from kivy.uix.textinput import TextInput
-from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.uix.gridlayout import GridLayout
 from kivy.uix.floatlayout import FloatLayout
-from kivy.graphics import Color, Rectangle
+from kivy.uix.relativelayout import RelativeLayout
+from kivy.uix.scrollview import ScrollView
+from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.graphics.texture import Texture
 from kivy.core.window import Window
 from kivy.clock import Clock
-from kivy.utils import get_color_from_hex, platform
-from kivymd.app import MDApp
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDRaisedButton, MDFlatButton
-from kivymd.uix.label import MDLabel
-from kivymd.uix.filemanager import MDFileManager
-from plyer import filechooser
+from kivy.utils import get_color_from_hex, platform as kivy_platform
+from kivy.metrics import dp, sp
+from kivy.properties import ObjectProperty, StringProperty, BooleanProperty
 from kivy.core.image import Image as CoreImage
 
-print("platfrom is ", platform)
-if platform == 'android':
-    from android.permissions import request_permissions, Permission, check_permission
+# KivyMD imports
+from kivymd.app import MDApp
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
+from kivymd.uix.label import MDLabel, MDIcon  # MDIcon is in label module in KivyMD 1.2.0
+from kivymd.uix.card import MDCard
+from kivymd.uix.toolbar import MDTopAppBar
+from kivymd.uix.snackbar import Snackbar
+from kivymd.uix.textfield import MDTextField
+
+# Android-specific imports
+if kivy_platform == 'android':
+    from android.permissions import request_permissions, check_permission
     from android.storage import primary_external_storage_path
     from jnius import autoclass, cast
 
-    # Required Android classes
     Build = autoclass('android.os.Build')
     Environment = autoclass('android.os.Environment')
     Intent = autoclass('android.content.Intent')
     Settings = autoclass('android.provider.Settings')
     Uri = autoclass('android.net.Uri')
     PythonActivity = autoclass('org.kivy.android.PythonActivity')
-    PackageManager = autoclass('android.content.pm.PackageManager')
-try:
-
-    class WSLCompatiblePermissions:
-        def __init__(self):
-            self.permissions = [
-                'android.permission.ACCEPT_HANDOVER',
-                'android.permission.ACCESS_BACKGROUND_LOCATION',
-                'android.permission.ACCESS_CHECKIN_PROPERTIES',
-                'android.permission.ACCESS_COARSE_LOCATION',
-                'android.permission.ACCESS_FINE_LOCATION',
-                'android.permission.ACCESS_LOCATION_EXTRA_COMMANDS',
-                'android.permission.ACCESS_NETWORK_STATE',
-                'android.permission.ACCESS_NOTIFICATION_POLICY',
-                'android.permission.ACCESS_WIFI_STATE',
-                'android.permission.ACCOUNT_MANAGER',
-                'android.permission.ACTIVITY_RECOGNITION',
-                'android.permission.ADD_VOICEMAIL',
-                'android.permission.ANSWER_PHONE_CALLS',
-                'android.permission.BATTERY_STATS',
-                'android.permission.BIND_ACCESSIBILITY_SERVICE',
-                'android.permission.BIND_APPWIDGET',
-                'android.permission.BIND_AUTOFILL_SERVICE',
-                'android.permission.BIND_CALL_REDIRECTION_SERVICE',
-                'android.permission.BIND_CARRIER_MESSAGING_SERVICE',
-                'android.permission.BIND_CARRIER_SERVICES',
-                'android.permission.BIND_CHOOSER_TARGET_SERVICE',
-                'android.permission.BIND_CONDITION_PROVIDER_SERVICE',
-                'android.permission.BIND_DEVICE_ADMIN',
-                'android.permission.BIND_DREAM_SERVICE',
-                'android.permission.BIND_INCALL_SERVICE',
-                'android.permission.BIND_INPUT_METHOD',
-                'android.permission.BIND_MIDI_DEVICE_SERVICE',
-                'android.permission.BIND_NFC_SERVICE',
-                'android.permission.BIND_NOTIFICATION_LISTENER_SERVICE',
-                'android.permission.BIND_PRINT_SERVICE',
-                'android.permission.BIND_QUICK_ACCESS_WALLET_SERVICE',
-                'android.permission.BIND_QUICK_SETTINGS_TILE',
-                'android.permission.BIND_REMOTEVIEWS',
-                'android.permission.BIND_SCREENING_SERVICE',
-                'android.permission.BIND_TELECOM_CONNECTION_SERVICE',
-                'android.permission.BIND_TEXT_SERVICE',
-                'android.permission.BIND_TV_INPUT',
-                'android.permission.BIND_VISUAL_VOICEMAIL_SERVICE',
-                'android.permission.BIND_VOICE_INTERACTION',
-                'android.permission.BIND_VPN_SERVICE',
-                'android.permission.BIND_VR_LISTENER_SERVICE',
-                'android.permission.BIND_WALLPAPER',
-                'android.permission.BLUETOOTH',
-                'android.permission.BLUETOOTH_ADMIN',
-                'android.permission.BLUETOOTH_PRIVILEGED',
-                'android.permission.BODY_SENSORS',
-                'android.permission.BODY_SENSORS_BACKGROUND',
-                'android.permission.BROADCAST_PACKAGE_REMOVED',
-                'android.permission.BROADCAST_SMS',
-                'android.permission.BROADCAST_STICKY',
-                'android.permission.BROADCAST_WAP_PUSH',
-                'android.permission.CALL_COMPANION_APP',
-                'android.permission.CALL_PHONE',
-                'android.permission.CALL_PRIVILEGED',
-                'android.permission.CAMERA',
-                'android.permission.CAPTURE_AUDIO_OUTPUT',
-                'android.permission.CAPTURE_SECURE_VIDEO_OUTPUT',
-                'android.permission.CAPTURE_VIDEO_OUTPUT',
-                'android.permission.CHANGE_COMPONENT_ENABLED_STATE',
-                'android.permission.CHANGE_CONFIGURATION',
-                'android.permission.CHANGE_NETWORK_STATE',
-                'android.permission.CHANGE_WIFI_MULTICAST_STATE',
-                'android.permission.CHANGE_WIFI_STATE',
-                'android.permission.CLEAR_APP_CACHE',
-                'android.permission.CONTROL_LOCATION_UPDATES',
-                'android.permission.DELETE_CACHE_FILES',
-                'android.permission.DELETE_PACKAGES',
-                'android.permission.DIAGNOSTIC',
-                'android.permission.DISABLE_KEYGUARD',
-                'android.permission.DUMP',
-                'android.permission.EXPAND_STATUS_BAR',
-                'android.permission.FACTORY_TEST',
-                'android.permission.FOREGROUND_SERVICE',
-                'android.permission.GET_ACCOUNTS',
-                'android.permission.GET_ACCOUNTS_PRIVILEGED',
-                'android.permission.GET_PACKAGE_SIZE',
-                'android.permission.GET_TASKS',
-                'android.permission.GLOBAL_SEARCH',
-                'android.permission.INSTALL_LOCATION_PROVIDER',
-                'android.permission.INSTALL_PACKAGES',
-                'android.permission.INSTALL_SHORTCUT',
-                'android.permission.INSTANT_APP_FOREGROUND_SERVICE',
-                'android.permission.INTERACT_ACROSS_PROFILES',
-                'android.permission.INTERNET',
-                'android.permission.KILL_BACKGROUND_PROCESSES',
-                'android.permission.LOCATION_HARDWARE',
-                'android.permission.MANAGE_DOCUMENTS',
-                'android.permission.MANAGE_EXTERNAL_STORAGE',
-                'android.permission.MANAGE_OWN_CALLS',
-                'android.permission.MASTER_CLEAR',
-                'android.permission.MEDIA_CONTENT_CONTROL',
-                'android.permission.MODIFY_AUDIO_SETTINGS',
-                'android.permission.MODIFY_PHONE_STATE',
-                'android.permission.MOUNT_FORMAT_FILESYSTEMS',
-                'android.permission.MOUNT_UNMOUNT_FILESYSTEMS',
-                'android.permission.NFC',
-                'android.permission.PACKAGE_USAGE_STATS',
-                'android.permission.PERSISTENT_ACTIVITY',
-                'android.permission.PROCESS_OUTGOING_CALLS',
-                'android.permission.READ_CALENDAR',
-                'android.permission.READ_CALL_LOG',
-                'android.permission.READ_CONTACTS',
-                'android.permission.READ_EXTERNAL_STORAGE',
-                'android.permission.READ_INPUT_STATE',
-                'android.permission.READ_LOGS',
-                'android.permission.READ_PHONE_NUMBERS',
-                'android.permission.READ_PHONE_STATE',
-                'android.permission.READ_PRECISE_PHONE_STATE',
-                'android.permission.READ_SMS',
-                'android.permission.READ_SYNC_SETTINGS',
-                'android.permission.READ_SYNC_STATS',
-                'android.permission.READ_VOICEMAIL',
-                'android.permission.REBOOT',
-                'android.permission.RECEIVE_BOOT_COMPLETED',
-                'android.permission.RECEIVE_MMS',
-                'android.permission.RECEIVE_SMS',
-                'android.permission.RECEIVE_WAP_PUSH',
-                'android.permission.RECORD_AUDIO',
-                'android.permission.REORDER_TASKS',
-                'android.permission.REQUEST_COMPANION_PROFILE_SIDECHANNEL',
-                'android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND',
-                'android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND',
-                'android.permission.REQUEST_DELETE_PACKAGES',
-                'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-                'android.permission.REQUEST_INSTALL_PACKAGES',
-                'android.permission.RESTART_PACKAGES',
-                'android.permission.SCHEDULE_EXACT_ALARM',
-                'android.permission.SEND_RESPOND_VIA_MESSAGE',
-                'android.permission.SEND_SMS',
-                'android.permission.SET_ALARM',
-                'android.permission.SET_ALWAYS_FINISH',
-                'android.permission.SET_ANIMATION_SCALE',
-                'android.permission.SET_DEBUG_APP',
-                'android.permission.SET_PREFERRED_APPLICATIONS',
-                'android.permission.SET_PROCESS_LIMIT',
-                'android.permission.SET_TIME',
-                'android.permission.SET_TIME_ZONE',
-                'android.permission.SET_WALLPAPER',
-                'android.permission.SET_WALLPAPER_HINTS',
-                'android.permission.SIGNAL_PERSISTENT_PROCESSES',
-                'android.permission.STATUS_BAR',
-                'android.permission.SYSTEM_ALERT_WINDOW',
-                'android.permission.TRANSMIT_IR',
-                'android.permission.UNINSTALL_SHORTCUT',
-                'android.permission.UPDATE_DEVICE_STATS',
-                'android.permission.USE_BIOMETRIC',
-                'android.permission.USE_FINGERPRINT',
-                'android.permission.USE_FULL_SCREEN_INTENT',
-                'android.permission.USE_SIP',
-                'android.permission.VIBRATE',
-                'android.permission.WAKE_LOCK',
-                'android.permission.WRITE_APN_SETTINGS',
-                'android.permission.WRITE_CALENDAR',
-                'android.permission.WRITE_CALL_LOG',
-                'android.permission.WRITE_CONTACTS',
-                'android.permission.WRITE_EXTERNAL_STORAGE',
-                'android.permission.WRITE_GSERVICES',
-                'android.permission.WRITE_SECURE_SETTINGS',
-                'android.permission.WRITE_SETTINGS',
-                'android.permission.WRITE_SYNC_SETTINGS',
-                'android.permission.WRITE_VOICEMAIL',
-            ]
+    Context = autoclass('android.content.Context')
+    WifiManager = autoclass('android.net.wifi.WifiManager')
+    ConnectivityManager = autoclass('android.net.ConnectivityManager')
+    NetworkCapabilities = autoclass('android.net.NetworkCapabilities')
 
 
-        def check_and_request_permissions(self):
-            if platform == 'android':
-                from android.permissions import request_permissions, check_permission, Permission
+# ============================================================================
+# CONSTANTS
+# ============================================================================
 
-                permissions_to_request = []
-                for permission in self.permissions:
-                    if not check_permission(permission):
-                        permissions_to_request.append(permission)
+DEFAULT_PORT = 8000
+BUFFER_SIZE = 8192
+LOG_MAX_LINES = 1000
 
-                if permissions_to_request:
-                    request_permissions(permissions_to_request, self.permission_callback)
+# Color scheme
+COLORS = {
+    'primary': '#6200EE',
+    'primary_dark': '#3700B3',
+    'secondary': '#03DAC6',
+    'background': '#F5F5F5',
+    'surface': '#FFFFFF',
+    'error': '#B00020',
+    'success': '#4CAF50',
+    'text_primary': '#000000',
+    'text_secondary': '#757575',
+}
 
-        def permission_callback(self, permissions, grant_results):
-            if all(grant_results):
-                print("All permissions granted")
-            else:
-                print("Some permissions were denied")
 
-    class DirectoryListingHandler(http.server.SimpleHTTPRequestHandler):
+# ============================================================================
+# LOGGING SYSTEM
+# ============================================================================
 
-        def list_directory(self, path):
+class Logger:
+    """Thread-safe logging system"""
+    
+    def __init__(self, max_lines: int = LOG_MAX_LINES):
+        self.max_lines = max_lines
+        self.logs = []
+        self.callbacks = []
+        self._lock = threading.Lock()
+    
+    def log(self, message: str, level: str = "INFO"):
+        """Add a log message"""
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = f"[{timestamp}] [{level}] {message}"
+        
+        with self._lock:
+            self.logs.append(log_entry)
+            if len(self.logs) > self.max_lines:
+                self.logs.pop(0)
+            
+            # Notify callbacks
+            for callback in self.callbacks:
+                try:
+                    Clock.schedule_once(lambda dt: callback(log_entry), 0)
+                except Exception as e:
+                    print(f"Error in log callback: {e}")
+    
+    def add_callback(self, callback: Callable):
+        """Register a callback for new log messages"""
+        self.callbacks.append(callback)
+    
+    def get_all_logs(self) -> str:
+        """Get all logs as a single string"""
+        with self._lock:
+            return "\n".join(self.logs)
+    
+    def clear(self):
+        """Clear all logs"""
+        with self._lock:
+            self.logs.clear()
+
+
+# Global logger instance
+logger = Logger()
+
+
+# ============================================================================
+# HTTP SERVER
+# ============================================================================
+
+class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
+    """Enhanced HTTP request handler with modern UI and better error handling"""
+    
+    def log_message(self, format, *args):
+        """Override to use our logger"""
+        message = f"{self.address_string()} - {format % args}"
+        logger.log(message, "INFO")
+    
+    def log_error(self, format, *args):
+        """Override error logging"""
+        message = f"{self.address_string()} - {format % args}"
+        logger.log(message, "ERROR")
+    
+    def end_headers(self):
+        """Add CORS headers"""
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', '*')
+        super().end_headers()
+    
+    def do_OPTIONS(self):
+        """Handle preflight requests"""
+        self.send_response(200)
+        self.end_headers()
+    
+    def list_directory(self, path):
+        """Enhanced directory listing with modern UI"""
+        try:
+            file_list = os.listdir(path)
+        except OSError:
+            self.send_error(404, "Cannot read directory")
+            return None
+        
+        file_list.sort(key=lambda a: a.lower())
+        displaypath = urllib.parse.unquote(self.path, errors='surrogatepass')
+        
+        try:
+            self.send_response(200)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            
+            # Modern HTML/CSS template
+            html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyServer - {displaypath}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }}
+        
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }}
+        
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }}
+        
+        .header h1 {{
+            font-size: 2em;
+            font-weight: 300;
+            margin-bottom: 10px;
+        }}
+        
+        .breadcrumb {{
+            background: #f8f9fa;
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            border-bottom: 1px solid #e9ecef;
+        }}
+        
+        .breadcrumb a {{
+            color: #667eea;
+            text-decoration: none;
+            transition: all 0.3s;
+        }}
+        
+        .breadcrumb a:hover {{
+            color: #764ba2;
+            text-decoration: underline;
+        }}
+        
+        .actions {{
+            padding: 30px;
+            background: #f8f9fa;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }}
+        
+        .action-card {{
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }}
+        
+        .action-card:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+        }}
+        
+        .action-card h3 {{
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.1em;
+            font-weight: 500;
+        }}
+        
+        input[type="text"],
+        input[type="file"] {{
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            margin-bottom: 10px;
+        }}
+        
+        input[type="text"]:focus,
+        input[type="file"]:focus {{
+            outline: none;
+            border-color: #667eea;
+        }}
+        
+        button, input[type="submit"] {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }}
+        
+        button:hover, input[type="submit"]:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }}
+        
+        .file-list {{
+            padding: 30px;
+        }}
+        
+        .file-item {{
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            transition: background 0.2s;
+        }}
+        
+        .file-item:hover {{
+            background: #f8f9fa;
+        }}
+        
+        .file-icon {{
+            font-size: 32px;
+            margin-right: 15px;
+            color: #667eea;
+        }}
+        
+        .file-info {{
+            flex: 1;
+        }}
+        
+        .file-name {{
+            color: #333;
+            text-decoration: none;
+            font-weight: 500;
+            display: block;
+            margin-bottom: 5px;
+        }}
+        
+        .file-name:hover {{
+            color: #667eea;
+        }}
+        
+        .file-meta {{
+            color: #6c757d;
+            font-size: 0.85em;
+        }}
+        
+        .file-actions {{
+            display: flex;
+            gap: 10px;
+        }}
+        
+        .btn-download {{
+            background: #28a745;
+            padding: 8px 16px;
+            font-size: 12px;
+        }}
+        
+        .search-box {{
+            margin-bottom: 20px;
+        }}
+        
+        .material-icons {{
+            vertical-align: middle;
+        }}
+        
+        @media (max-width: 768px) {{
+            .actions {{
+                grid-template-columns: 1fr;
+            }}
+            
+            .file-item {{
+                flex-direction: column;
+                align-items: flex-start;
+            }}
+            
+            .file-actions {{
+                margin-top: 10px;
+                width: 100%;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><span class="material-icons">folder</span> PyServer</h1>
+            <p>{displaypath}</p>
+        </div>
+        
+        <div class="breadcrumb">
+            <a href="/"><span class="material-icons">home</span> Home</a>
+            {self._generate_breadcrumb(displaypath)}
+        </div>
+        
+        <div class="actions">
+            <div class="action-card">
+                <h3><span class="material-icons">create_new_folder</span> Create Directory</h3>
+                <form method="POST" action="/create_directory">
+                    <input type="text" name="dirname" placeholder="New directory name" required>
+                    <input type="submit" value="Create">
+                </form>
+            </div>
+            
+            <div class="action-card">
+                <h3><span class="material-icons">upload_file</span> Upload File</h3>
+                <form method="POST" action="/upload" enctype="multipart/form-data">
+                    <input type="file" name="file" required>
+                    <input type="submit" value="Upload">
+                </form>
+            </div>
+            
+            <div class="action-card search-box">
+                <h3><span class="material-icons">search</span> Search Files</h3>
+                <input type="text" id="searchInput" placeholder="Type to search..." onkeyup="filterFiles()">
+            </div>
+        </div>
+        
+        <div class="file-list" id="fileList">
+            {self._generate_file_list(path, file_list)}
+        </div>
+    </div>
+    
+    <script>
+        function filterFiles() {{
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toUpperCase();
+            const fileItems = document.getElementsByClassName('file-item');
+            
+            for (let item of fileItems) {{
+                const fileName = item.querySelector('.file-name').textContent;
+                if (fileName.toUpperCase().indexOf(filter) > -1) {{
+                    item.style.display = '';
+                }} else {{
+                    item.style.display = 'none';
+                }}
+            }}
+        }}
+    </script>
+</body>
+</html>
+"""
+            self.wfile.write(html.encode('utf-8', errors='surrogatepass'))
+        except Exception as e:
+            logger.log(f"Error generating directory listing: {e}", "ERROR")
+            self.send_error(500, "Internal server error")
+    
+    def _generate_breadcrumb(self, path):
+        """Generate breadcrumb navigation"""
+        parts = [p for p in path.split('/') if p]
+        breadcrumb = ""
+        current_path = ""
+        
+        for part in parts:
+            current_path += f"/{part}"
+            breadcrumb += f' <span>/</span> <a href="{urllib.parse.quote(current_path)}">{part}</a>'
+        
+        return breadcrumb
+    
+    def _generate_file_list(self, path, file_list):
+        """Generate HTML for file listing"""
+        html = ""
+        
+        for name in file_list:
+            fullname = os.path.join(path, name)
+            displayname = linkname = name
+            
             try:
-                file_list = os.listdir(path)
-            except os.error:
-                self.send_error(404, "No permission to list directory")
-                return None
-
-            file_list.sort(key=lambda a: a.lower())
-            displaypath = urllib.parse.unquote(self.path)
-
-            try:
-                self.send_response(200)
-                self.send_header("Content-type", "text/html; charset=utf-8")
-                self.end_headers()
-
-                # HTML with modern CSS
-                self.wfile.write(b'<!DOCTYPE html>')
-                self.wfile.write(b"<html lang='en'><head>")
-                self.wfile.write(b"<meta charset='UTF-8'>")
-                self.wfile.write(b"<meta name='viewport' content='width=device-width, initial-scale=1.0'>")
-
-                # Insert the custom CSS styles
-                self.wfile.write(b"""
-                <style>
-                    :root {
-                        --primary-color: #4299E1;
-                        --secondary-color: #2C5282;
-                        --background-color: #F7FAFC;
-                        --text-color: #2D3748;
-                        --border-color: #E2E8F0;
-                        --hover-color: #EDF2F7;
-                    }
-
-                    * {
-                        box-sizing: border-box;
-                        margin: 0;
-                        padding: 0;
-                    }
-
-                    body {
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-                        background-color: var(--background-color);
-                        color: var(--text-color);
-                        line-height: 1.5;
-                    }
-
-                    .container {
-                        max-width: 1200px;
-                        margin: 0 auto;
-                        padding: 1rem;
-                    }
-
-                    h1 {
-                        font-size: 2rem;
-                        text-align: center;
-                        margin-bottom: 1rem;
-                    }
-
-                    .breadcrumb {
-                        display: flex;
-                        flex-wrap: wrap;
-                        justify-content: center;
-                        padding: 0.5rem;
-                        background-color: white;
-                        border-radius: 0.5rem;
-                        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-                        margin-bottom: 1rem;
-                    }
-
-                    .breadcrumb a {
-                        color: var(--primary-color);
-                        text-decoration: none;
-                        padding: 0.25rem 0.5rem;
-                    }
-
-                    .breadcrumb a:hover {
-                        text-decoration: underline;
-                    }
-
-                    .actions {
-                        display: flex;
-                        flex-wrap: wrap;
-                        gap: 1rem;
-                        margin-bottom: 1rem;
-                    }
-
-                    .action-form {
-                        flex: 1;
-                        min-width: 200px;
-                    }
-
-                    input[type="text"],
-                    input[type="file"] {
-                        width: 100%;
-                        padding: 0.5rem;
-                        border: 1px solid var(--border-color);
-                        border-radius: 0.25rem;
-                        font-size: 1rem;
-                    }
-
-                    input[type="submit"] {
-                        width: 100%;
-                        padding: 0.5rem;
-                        background-color: var(--primary-color);
-                        color: white;
-                        border: none;
-                        border-radius: 0.25rem;
-                        font-size: 1rem;
-                        cursor: pointer;
-                        transition: background-color 0.2s ease;
-                    }
-
-                    input[type="submit"]:hover {
-                        background-color: var(--secondary-color);
-                    }
-
-                    .table-container {
-                        overflow-x: auto;
-                        background-color: white;
-                        border-radius: 0.5rem;
-                        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-                    }
-
-                    table {
-                        width: 100%;
-                        border-collapse: separate;
-                        border-spacing: 0;
-                    }
-
-                    th, td {
-                        padding: 0.75rem 1rem;
-                        text-align: left;
-                        border-bottom: 1px solid var(--border-color);
-                    }
-
-                    th {
-                        background-color: var(--primary-color);
-                        color: white;
-                        font-weight: 600;
-                        position: sticky;
-                        top: 0;
-                        z-index: 10;
-                    }
-
-                    tr:hover {
-                        background-color: var(--hover-color);
-                    }
-
-                    .file-icon {
-                        font-size: 1.25rem;
-                    }
-
-                    .file-name {
-                        max-width: 200px;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        white-space: nowrap;
-                    }
-
-                    .file-name:hover {
-                        overflow: visible;
-                        white-space: normal;
-                        word-break: break-all;
-                    }
-
-                    .action-button {
-                        padding: 0.25rem 0.5rem;
-                        background-color: var(--primary-color);
-                        color: white;
-                        border: none;
-                        border-radius: 0.25rem;
-                        font-size: 0.875rem;
-                        cursor: pointer;
-                        transition: background-color 0.2s ease;
-                        white-space: nowrap;
-                    }
-
-                    .action-button:hover {
-                        background-color: var(--secondary-color);
-                    }
-
-                    @media (max-width: 640px) {
-                        .actions {
-                            flex-direction: column;
-                        }
-
-                        th, td {
-                            padding: 0.5rem;
-                        }
-
-                        .hide-on-mobile {
-                            display: none;
-                        }
-
-                        .file-name {
-                            max-width: 150px;
-                        }
-
-                        table {
-                            table-layout: fixed;
-                        }
-
-                        th:nth-child(1), td:nth-child(1) { width: 10%; }
-                        th:nth-child(2), td:nth-child(2) { width: 60%; }
-                        th:nth-child(3), td:nth-child(3) { width: 30%; }
-                    }
-                </style>
-                """)
-
-                self.wfile.write(f"<title>Directory listing for {displaypath}</title>".encode('utf-8'))
-                self.wfile.write(b"</head><body>")
-
-                # Container for content
-                self.wfile.write(b"<div class='container'>")
-
-                self.wfile.write(f"<h1>Directory listing for {displaypath}</h1>".encode('utf-8'))
-
-                # Breadcrumb Navigation
-                self.wfile.write(b'<div class="breadcrumb">')
-                self.wfile.write(b'<a href="/">Home</a>')
-                parts = displaypath.split('/')
-                breadcrumb_path = ""
-                for part in parts[:-1]:
-                    if part:
-                        breadcrumb_path += part + '/'
-                        self.wfile.write(f'<span>/</span><a href="{urllib.parse.quote(breadcrumb_path)}">{part}</a>'.encode('utf-8'))
-                if parts[-1]:
-                    self.wfile.write(f'<span>/</span>{parts[-1]}'.encode('utf-8'))
-                self.wfile.write(b'</div>')
-
-                # Actions
-                self.wfile.write(b"""
-                    <div class="actions">
-                        <form method="POST" action="/create_directory" class="action-form">
-                            <input type="text" name="dirname" placeholder="New Directory Name" required>
-                            <input type="submit" value="Create Directory">
-                        </form>
-                        <form method="POST" action="/upload" enctype="multipart/form-data" class="action-form">
-                            <input type="file" name="file" required>
-                            <input type="submit" value="Upload File">
-                        </form>
-                        <div class="action-form">
-                            <input type="text" id="searchBar" onkeyup="filterFiles()" placeholder="Search files..">
-                        </div>
+                stat = os.stat(fullname)
+                size = stat.st_size
+                mtime = datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M')
+                
+                if os.path.isdir(fullname):
+                    icon = "folder"
+                    displayname += "/"
+                    linkname += "/"
+                    size_str = "-"
+                else:
+                    icon = self._get_file_icon(name)
+                    size_str = self._format_size(size)
+                
+                html += f"""
+                <div class="file-item">
+                    <span class="material-icons file-icon">{icon}</span>
+                    <div class="file-info">
+                        <a href="{urllib.parse.quote(linkname)}" class="file-name">{displayname}</a>
+                        <div class="file-meta">{size_str} • {mtime}</div>
                     </div>
-                """)
-
-                # File listing in a table
-                self.wfile.write(b"<div class='table-container'><table id='fileTable'>")
-                self.wfile.write(b"<thead><tr>")
-                self.wfile.write(b"<th>Type</th>")
-                self.wfile.write(b"<th>Name</th>")
-                self.wfile.write(b"<th>Actions</th>")
-                self.wfile.write(b"</tr></thead>")
-                self.wfile.write(b"<tbody>")
-
-                for name in file_list:
-                    fullname = os.path.join(path, name)
-                    displayname = linkname = name
-                    
-                    if os.path.isdir(fullname):
-                        icon = "📁"
-                        displayname += "/"
-                        linkname += "/"
-                    else:
-                        icon = "📄"
-
-                    self.wfile.write(b"<tr>")
-                    self.wfile.write(f"<td><span class='file-icon'>{icon}</span></td>".encode('utf-8'))
-                    self.wfile.write(f'<td><div class="file-name"><a href="{urllib.parse.quote(linkname)}" title="{displayname}">{displayname}</a></div></td>'.encode('utf-8'))
-                    self.wfile.write(b"<td>")
-                    if not os.path.isdir(fullname):
-                        self.wfile.write(f'<button class="action-button" onclick="location.href=\'/download?file={urllib.parse.quote(fullname)}\'">Download</button>'.encode('utf-8'))
-                    self.wfile.write(b"</td>")
-                    self.wfile.write(b"</tr>")
-
-                self.wfile.write(b"</tbody></table></div>")
-
-                # Add JavaScript for search functionality
-                self.wfile.write(b"""
-                <script>
-                function filterFiles() {
-                    var input, filter, table, tr, td, i, txtValue;
-                    input = document.getElementById("searchBar");
-                    filter = input.value.toUpperCase();
-                    table = document.getElementById("fileTable");
-                    tr = table.getElementsByTagName("tr");
-                    for (i = 0; i < tr.length; i++) {
-                        td = tr[i].getElementsByTagName("td")[1];
-                        if (td) {
-                            txtValue = td.textContent || td.innerText;
-                            if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                                tr[i].style.display = "";
-                            } else {
-                                tr[i].style.display = "none";
-                            }
-                        }
-                    }
-                }
-                </script>
-                """)
-
-                self.wfile.write(b"</div></body></html>")
-            except Exception as e:
-                self.send_error(500, "Internal Server Error")
-        def do_GET(self):
-            """Handle GET requests."""
-            if self.path == '/favicon.ico':
-                self.send_response(204)  # No content
-                self.end_headers()
+                    <div class="file-actions">
+                        {'<button class="btn-download" onclick="location.href=\'/download?file=' + urllib.parse.quote(fullname) + '\'">Download</button>' if not os.path.isdir(fullname) else ''}
+                    </div>
+                </div>
+                """
+            except OSError:
+                continue
+        
+        return html
+    
+    def _get_file_icon(self, filename):
+        """Get appropriate Material icon for file type"""
+        ext = os.path.splitext(filename)[1].lower()
+        
+        icon_map = {
+            '.txt': 'description',
+            '.pdf': 'picture_as_pdf',
+            '.doc': 'description',
+            '.docx': 'description',
+            '.jpg': 'image',
+            '.jpeg': 'image',
+            '.png': 'image',
+            '.gif': 'image',
+            '.mp3': 'audio_file',
+            '.mp4': 'video_file',
+            '.zip': 'folder_zip',
+            '.rar': 'folder_zip',
+            '.py': 'code',
+            '.js': 'code',
+            '.html': 'code',
+            '.css': 'code',
+        }
+        
+        return icon_map.get(ext, 'insert_drive_file')
+    
+    def _format_size(self, size):
+        """Format file size in human-readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} PB"
+    
+    def do_POST(self):
+        """Handle POST requests"""
+        if self.path == '/upload':
+            self.handle_upload()
+        elif self.path == '/create_directory':
+            self.handle_create_directory()
+        else:
+            self.send_error(404, "Not found")
+    
+    def handle_upload(self):
+        """Handle file uploads"""
+        try:
+            content_type = self.headers['Content-Type']
+            if 'multipart/form-data' not in content_type:
+                self.send_error(400, "Invalid content type")
                 return
-            elif self.path.startswith('/download'):
-                self.handle_download()
-            else:
-                log_message(f"GET request for: {self.path}")
-                super().do_GET()  # Call parent method for other GET requests
-        def end_headers(self):
-            self.send_header('Access-Control-Allow-Origin', '*')  # Allow access from any origin
-            super().end_headers()
-        def do_POST(self):
-            """Handle POST requests."""
-            if self.path == '/upload':
-                self.handle_upload()
-            elif self.path == '/create_directory':
-                self.handle_create_directory()  # Assuming you have this method
-            else:
-                self.send_error(404, "File not found.")
-
-        def handle_upload(self):
-            """Handle file upload."""
+            
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
-
-            # Assuming the upload uses a multipart/form-data encoding
-            boundary = self.headers['Content-Type'].split('=')[1].encode()
+            
+            boundary = content_type.split('=')[1].encode()
             parts = post_data.split(boundary)
-
-            # Find the part that contains the file
+            
             for part in parts:
                 if b'Content-Disposition' in part and b'filename=' in part:
-                    # Split header and content
                     header, file_content = part.split(b'\r\n\r\n', 1)
-                    filename = self.extract_filename(header)
+                    filename = self._extract_filename(header)
+                    
                     if filename:
-                        # Remove trailing CRLF from file content
                         file_content = file_content.rstrip(b'\r\n--')
-
-                        # Sanitize filename to prevent directory traversal attacks
                         filename = os.path.basename(filename)
-
-                        # Check if file already exists
-                        if os.path.isfile(os.path.join(os.getcwd(), filename)):
-                            self.send_error(409, "File already exists.")
-                            return
-
-                        # Save the uploaded file
-                        try:
-                            with open(os.path.join(os.getcwd(), filename), 'wb') as f:
-                                f.write(file_content)
-                            self.send_response(302)  # Redirect after upload
-                            self.send_header('Location', '/')
-                            self.end_headers()
-                        except OSError as e:
-                            self.send_error(500, f"Failed to save file: {e}")
+                        
+                        filepath = os.path.join(os.getcwd(), filename)
+                        
+                        with open(filepath, 'wb') as f:
+                            f.write(file_content)
+                        
+                        logger.log(f"File uploaded: {filename}", "INFO")
+                        
+                        self.send_response(302)
+                        self.send_header('Location', '/')
+                        self.end_headers()
                         return
-
-            self.send_error(400, "No valid file found in upload.")
-
-        def handle_download(self):
-            """Handle file download requests."""
-            query = urllib.parse.urlparse(self.path).query
-            params = urllib.parse.parse_qs(query)
-
-            if 'file' in params:
-                filename = params['file'][0]
-                full_path = os.path.join(os.getcwd(), filename)
-
-                if os.path.isfile(full_path):
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/octet-stream')
-                    self.send_header('Content-Disposition', f'attachment; filename="{os.path.basename(full_path)}"')
-                    self.send_header('Content-Length', str(os.path.getsize(full_path)))
-                    self.end_headers()
-
-                    with open(full_path, 'rb') as file:
-                        self.wfile.write(file.read())
-                else:
-                    self.send_error(404, "File not found")
-            else:
-                self.send_error(400, "Bad request: No file specified")
-
-        def extract_filename(self, header):
-            """Extract the filename from the Content-Disposition header."""
-            header = header.decode('utf-8')
-            filename = None
-            for line in header.splitlines():
-                if "filename=" in line:
-                    filename = line.split('filename=')[1].strip('"')
-                    break
-            return filename
-
-        def handle_create_directory(self):
-            """Handle directory creation."""
-            form = self.parse_multipart_form_data()
-            if 'dirname' not in form:
-                self.send_error(400, "Directory name not provided.")
+            
+            self.send_error(400, "No file in upload")
+        except Exception as e:
+            logger.log(f"Upload error: {e}", "ERROR")
+            self.send_error(500, f"Upload failed: {str(e)}")
+    
+    def handle_create_directory(self):
+        """Handle directory creation"""
+        try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            
+            params = urllib.parse.parse_qs(post_data)
+            dirname = params.get('dirname', [''])[0]
+            
+            if not dirname:
+                self.send_error(400, "Directory name required")
                 return
             
-            dirname = form['dirname'][0]
-            os.makedirs(os.path.join(os.getcwd(), dirname), exist_ok=True)
+            dirname = os.path.basename(dirname)
+            dirpath = os.path.join(os.getcwd(), dirname)
             
-            self.send_response(302)  # Redirect after directory creation
+            os.makedirs(dirpath, exist_ok=True)
+            logger.log(f"Directory created: {dirname}", "INFO")
+            
+            self.send_response(302)
             self.send_header('Location', '/')
             self.end_headers()
-
-        def parse_multipart_form_data(self):
-            """Parse multipart form data from the request."""
-            boundary = self.headers['Content-Type'].split("=")[1].encode()
-            content_length = int(self.headers['Content-Length'])
-            body = self.rfile.read(content_length)
-
-            parts = body.split(boundary)
-            form_data = {}
-
-            for part in parts:
-                if not part or part == b'--' or part == b'--\r\n':
-                    continue
-                
-                if b'Content-Disposition' in part:
-                    header, data = part.split(b'\r\n\r\n', 1)
-                    disposition = header.decode()
-                    name = self.get_disposition_value(disposition, 'name')
-                    filename = self.get_disposition_value(disposition, 'filename')
-
-                    if filename:
-                        form_data['file'] = {
-                            'filename': filename,
-                            'file': data.rstrip(b'\r\n--')
-                        }
-                    else:
-                        value = data.rstrip(b'\r\n--').decode()
-                        form_data[name] = [value]
-            
-            return form_data
-
-        def get_disposition_value(self, disposition, attribute):
-            """Extract a value from a content disposition header."""
-            for part in disposition.split(';'):
-                if attribute in part:
-                    return part.split('=')[1].strip(' "')
-            return None
-
-        def format_date_time(self, timestamp):
-            """Format timestamp to a readable date-time string."""
-            return datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-
-        def sizeof_fmt(self, num, suffix='B'):
-            """Human-readable file size."""
-            for unit in ['','K','M','G','T']:
-                if num < 1024:
-                    return f"{num:.1f}{unit}{suffix}"
-                num /= 1024
-            return f"{num:.1f}Y{suffix}"
-
-    class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
-        """Handle requests in a separate thread."""
-        pass
-    class ReuseAddressHTTPServer(socketserver.TCPServer):
-        allow_reuse_address = True
-
-    # Define a global variable for the server
-    httpd = None
-    server_thread = None
-
-    # Function to log messages
-    def log_message(message):
-        app = MDApp.get_running_app()
-        if app:
-            Clock.schedule_once(lambda dt: app.log_output(message))
-
-    # Function to start the HTTP server
-    def start_http_server(directory):
-        global httpd
-        PORT = 8000
-        os.chdir(directory)
-
+        except Exception as e:
+            logger.log(f"Directory creation error: {e}", "ERROR")
+            self.send_error(500, f"Failed to create directory: {str(e)}")
+    
+    def _extract_filename(self, header):
+        """Extract filename from Content-Disposition header"""
+        header = header.decode('utf-8')
+        for line in header.splitlines():
+            if 'filename=' in line:
+                return line.split('filename=')[1].strip('"')
+        return None
+    
+    def do_GET(self):
+        """Handle GET requests"""
+        if self.path == '/favicon.ico':
+            self.send_response(204)
+            self.end_headers()
+        elif self.path.startswith('/download'):
+            self.handle_download()
+        else:
+            super().do_GET()
+    
+    def handle_download(self):
+        """Handle file downloads"""
         try:
-            log_message(f"Serving HTTP on port {PORT} from {directory}...")
-            httpd = ReuseAddressHTTPServer(("", PORT), DirectoryListingHandler)
-            httpd.serve_forever()
-        except OSError as e:
-            log_message(f"Error starting server: {e}")
+            query = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(query)
             
-
-    class MainScreen(Screen):
-        qr_image = ObjectProperty(None)
-
-        def __init__(self, **kwargs):
-            super(MainScreen, self).__init__(**kwargs)
-            self.server_running = False
-            self.file_manager = None
-            self.current_ip = None  # Initialize the current IP variable
-            self.current_port = 8000  # Set default port
-            self.build()
-
-        def build(self):
-            layout = BoxLayout(orientation='vertical', padding=[10, 10, 10, 10], spacing=5)
-
-            # Set the background color
-            with self.canvas.before:
-                self.rect = Rectangle(size=self.size, pos=self.pos)
-                self.bind(size=self._update_rect, pos=self._update_rect)
-
-            # Title Label
-            self.title_label = MDLabel(
-                text="PyServer",
-                halign="center",
-                theme_text_color="Custom",
-                text_color=get_color_from_hex("#333333"),
-                font_style="H4",
-                size_hint_y=None,
-                height=dp(50),
-                pos_hint={'center_x': 0.5, 'center_y': -0.4}
-                
-            )
-            layout.add_widget(self.title_label)
-
-            # QR Code Display
-            qr_layout = RelativeLayout(size_hint_y=None, height=dp(200))
-            self.qr_image = Image(
-                size_hint=(None, None),
-                size=(dp(100), dp(100)),
-                allow_stretch=True,
-                keep_ratio=True,
-                pos_hint={'center_x': 0.5, 'center_y': 0.5}
-            )
-            qr_layout.add_widget(self.qr_image)
-            layout.add_widget(qr_layout)
-
-            # IP Address and Port Label
-            self.ip_label = Label(
-                text="IP:Port will appear here",
-                halign="center",
-                color=get_color_from_hex("#0000FF"),
-                size_hint_y=None,
-                height=dp(40)
-            )
-            self.ip_label.bind(on_touch_down=self.open_link)
-            layout.add_widget(self.ip_label)
-
-            # Directory Input Layout
-            dir_input_layout = BoxLayout(orientation='horizontal', spacing=dp(10), size_hint_y=None, height=dp(35))
-
-            # Directory Input Text Field
-            self.directory_input = TextInput(
-                hint_text="Enter directory path",
-                multiline=False,
-                size_hint_x=0.7,
-                pos_hint={'center_x': 0.5}
-            )
-            dir_input_layout.add_widget(self.directory_input)
-
-            # Enter Button
-            button_enter = MDRaisedButton(
-                text="Enter",
-                size_hint_x=0.3,
-                pos_hint={'center_x': 0.5}
-            )
-            button_enter.bind(on_press=self.enter_directory)
-            dir_input_layout.add_widget(button_enter)
-
-            layout.add_widget(dir_input_layout)
-
-            # Start/Stop Server Button
-            self.button_start_stop = MDRaisedButton(
-                text="Start Server",
-                size_hint_x=0.8,
-                height=dp(50),
-                pos_hint={'center_x': 0.5},
-                md_bg_color=get_color_from_hex("#03DAC6"),
-                text_color=get_color_from_hex("#000000")
-            )
-            self.button_start_stop.bind(on_press=self.toggle_server)
-            layout.add_widget(self.button_start_stop)
-
-            # View Logs Button
-            button_view_logs = MDRaisedButton(
-                text="View Logs",
-                size_hint_x=0.8,
-                height=dp(50),
-                pos_hint={'center_x': 0.5},
-                md_bg_color=get_color_from_hex("#BB86FC"),
-                text_color=get_color_from_hex("#000000")
-            )
-            button_view_logs.bind(on_press=self.switch_to_logs)
-            layout.add_widget(button_view_logs)
-
-            # Information Label
-            info_label = MDLabel(
-                text="/storage/sdcard is for internal storage\n/storage/XXXX-XXXX is for external storage",
-                halign='center',
-                theme_text_color="Custom",
-                text_color=get_color_from_hex("#555555"),
-                pos_hint={'center_x': 0.5, 'center_y': -0.09},                
-                height=dp(20)
-            )
-            layout.add_widget(info_label)
-
-            # Quit Button
-            button_quit = MDRaisedButton(
-                text="Quit",
-                size_hint_x=0.2,
-                size_hint_y=None,
-                height=dp(40),
-                pos_hint={'x': 0, 'y': 0}  # Positioning the quit button
-            )
-            button_quit.bind(on_press=self.quit_app)  # Bind the quit button to the quit_app method
-            layout.add_widget(button_quit)
-
-            self.add_widget(layout)
-
-        # Add this method to handle the "Enter" button action
-
-        def enter_directory(self, instance):
-            """Get the directory input from the user and start the server."""
-            directory = self.directory_input.text.strip()  # Get the input from the TextInput
-            if directory:  # Check if the directory is not empty
-                if os.path.isdir(directory):  # Check if the directory is valid
-                    self.start_server(directory)  # Start the server with the entered directory
-                    self.directory_input.text = ""  # Clear the input field after submission
-                else:
-                    self.show_error_dialog("Please enter a valid directory path.")  # Show a message if the directory is invalid
-            else:
-                self.show_error_dialog("Please enter a directory path.")  # Show a message if the directory is empty
-
-        def show_error_dialog(self, message):
-            """Display a modern MDDialog with the provided message."""
-            self.dialog = MDDialog(
-                text=message,
-                buttons=[
-                    MDRaisedButton(
-                        text="OK",
-                        on_release=lambda x: self.dialog.dismiss()
-                    )
-                ]
-            )
-            self.dialog.open()
-
-        def _update_rect(self, instance, value):
-            self.rect.pos = instance.pos
-            self.rect.size = instance.size
-
-        def open_link(self, instance, touch):
-            """Open the URL in a web browser when the label is clicked."""
-            if instance.collide_point(touch.x, touch.y) and self.server_running:
-                if self.current_ip and self.current_port:  # Ensure IP and port are set
-                    url = f"http://{self.current_ip}:{self.current_port}"  # Construct URL
-                    webbrowser.open(url)  # Open URL in web browser
-
-
-
-
-
-
-        def toggle_server(self, instance):
-            """Toggle the server on and off."""
-            if self.server_running:
-                self.stop_server()
-            else:
-                self.enter_directory(instance)
-
-        def stop_server(self):
-            global httpd, server_thread
-            if httpd:
-                try:
-                    log_message("Stopping server...")
-                    # Shutdown the server
-                    httpd.shutdown()
-                    httpd.server_close()
-                    
-                    # Wait for the server thread to complete
-                    if server_thread and server_thread.is_alive():
-                        server_thread.join(timeout=5)
-                    
-                    # Reset server variables
-                    httpd = None
-                    server_thread = None
-                    
-                    # Update UI
-                    self.server_running = False
-                    self.button_start_stop.text = "Start Server"
-                    self.qr_image.texture = None
-                    self.ip_label.text = "IP:Port will appear here"
-                    self.ip_label.bind(on_touch_down=self.open_link)
-                    
-                    log_message("Server stopped.")
-                except Exception as e:
-                    log_message(f"Error stopping server: {e}")
-
-        def start_server(self, directory):
-            """Start the HTTP server with the selected directory."""
-            global httpd, server_thread
+            if 'file' not in params:
+                self.send_error(400, "File parameter missing")
+                return
             
-            # Ensure previous server is fully stopped
-            if self.server_running:
-                self.stop_server()
-                # Add a small delay to ensure socket is fully released
-                import time
-                time.sleep(1)
+            filepath = params['file'][0]
             
-            # Start new server
-            server_thread = threading.Thread(
-                target=start_http_server,
-                args=(directory,),
+            if not os.path.isfile(filepath):
+                self.send_error(404, "File not found")
+                return
+            
+            filename = os.path.basename(filepath)
+            filesize = os.path.getsize(filepath)
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+            self.send_header('Content-Length', str(filesize))
+            self.end_headers()
+            
+            with open(filepath, 'rb') as f:
+                while True:
+                    chunk = f.read(BUFFER_SIZE)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+            
+            logger.log(f"File downloaded: {filename}", "INFO")
+        except Exception as e:
+            logger.log(f"Download error: {e}", "ERROR")
+            self.send_error(500, f"Download failed: {str(e)}")
+
+
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    """Threaded HTTP server for handling multiple connections"""
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+# ============================================================================
+# SERVER MANAGER
+# ============================================================================
+
+class ServerManager:
+    """Manages the HTTP server lifecycle"""
+    
+    def __init__(self):
+        self.server = None
+        self.server_thread = None
+        self.is_running = False
+        self.port = DEFAULT_PORT
+        self.directory = None
+        self.executor = ThreadPoolExecutor(max_workers=1)
+    
+    def start(self, directory: str, port: int = DEFAULT_PORT) -> bool:
+        """Start the HTTP server"""
+        if self.is_running:
+            logger.log("Server already running", "WARNING")
+            return False
+        
+        try:
+            # Validate directory
+            if not os.path.isdir(directory):
+                logger.log(f"Invalid directory: {directory}", "ERROR")
+                return False
+            
+            self.directory = directory
+            self.port = port
+            
+            # Change to target directory
+            os.chdir(directory)
+            
+            # Create server
+            self.server = ThreadedHTTPServer(("", port), EnhancedHTTPHandler)
+            
+            # Start server in separate thread
+            self.server_thread = threading.Thread(
+                target=self.server.serve_forever,
                 daemon=True
             )
-            server_thread.start()
+            self.server_thread.start()
             
-            # Update UI
-            self.current_ip = self.get_local_ip()
-            qr_texture = self.generate_qr_code(f"http://{self.current_ip}:{self.current_port}")
-            if qr_texture:
-                self.qr_image.texture = qr_texture
-                self.qr_image.size = qr_texture.size
-                self.qr_image.canvas.ask_update()
-            
-            self.update_ip_label()
-            self.server_running = True
-            self.button_start_stop.text = "Stop Server"
-        
-        
-
-        def select_directory(self, path):
-            """Select a directory to serve."""
-            if self.server_running:
-                self.stop_server()  # Stop the current server if running
-            self.start_server(path)  # Start server with the selected path
-            self.close_file_manager()  # Close the file manager
-
-
-
-
-        def update_ip_label(self):
-            """Update the IP address and port label."""
-            self.ip_label.text = f"{self.current_ip}:{self.current_port}"  # Update the label with current IP and port
-            self.ip_label.color = get_color_from_hex("#0000FF")  # Reset color to indicate it's clickable
-            self.ip_label.bind(on_touch_down=self.open_link)  # Re-bind the click event
-
-        def open_filechooser(self, instance):
-            """Open the file chooser for directory selection."""
-            self.file_manager = MDFileManager(
-                exit_manager=self.close_file_manager,
-                select_path=self.select_directory,
-            )
-            self.file_manager.show('/')  # Show the file manager at the root directory
-
-        def close_file_manager(self, *args):
-            """Close the file manager."""
-            if self.file_manager:
-                self.file_manager.close()
-
-        def get_local_ip(self):
-            """Fetch the local IP address."""
-            ip = None
-            try:
-                # Try getting the IP by connecting to an external server
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-                s.close()
-            except Exception:
-                try:
-                    if platform.system() == "win":
-                        output = subprocess.check_output(['ipconfig'], text=True)
-                        for line in output.splitlines():
-                            if 'IPv4 Address' in line:
-                                ip = line.split(':')[1].strip()
-                                break
-                    else:
-                        output = subprocess.check_output(['ifconfig'], text=True)
-                        for line in output.splitlines():
-                            if 'inet ' in line and '127.0.0.1' not in line:
-                                ip = line.split()[1]
-                                break
-                        if ip is None:
-                            output = subprocess.check_output(['ip', 'addr'], text=True)
-                            for line in output.splitlines():
-                                if 'inet ' in line and '127.0.0.1' not in line:
-                                    ip = line.split()[1].split('/')[0]
-                                    break
-                except Exception as e:
-                    self.log_message(f"Error fetching local IP: {e}")
-            
-            if ip is None or ip.startswith("127."):
-                # As a last resort, try to get the hostname IP
-                ip = socket.gethostbyname(socket.gethostname())
-            
-            return ip
-
-
-
-        def quit_app(self, instance):
-            """Quit the application."""
-            App.get_running_app().stop()  # Terminate the application
-
-
-        def generate_qr_code(self, url):
-            try:
-                qr = qrcode.QRCode(
-                    version=1,
-                    error_correction=qrcode.constants.ERROR_CORRECT_L,
-                    box_size=10,
-                    border=4,
-                )
-                qr.add_data(url)
-                qr.make(fit=True)
-
-                img = qr.make_image(fill_color="black", back_color="white")
-
-                # Convert PIL image to bytes
-                buf = BytesIO()
-                img.save(buf, format='PNG')
-                buf.seek(0)
-
-                # Create a Kivy texture
-                core_img = CoreImage(buf, ext='png')
-                qr_texture = core_img.texture
-                if qr_texture:
-                    self.qr_image.texture = qr_texture
-                    self.qr_image.size = (dp(200), dp(200))  # Set to match the size in build method
-                    self.qr_image.canvas.ask_update()
-                else:
-                    pass
-        
-                print(f"QR code generated successfully. Texture size: {texture.size}")
-                return texture
-            except Exception as e:
-                return None
-            
-        def switch_to_logs(self, instance):
-            self.manager.current = 'logs'
-
-
-    class LogScreen(Screen):
-        log_output_area = ObjectProperty(None)
-
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-
-            # Create the layout
-            layout = FloatLayout()
-
-            # Create a text input for logs
-            self.log_output_area = TextInput(
-                size_hint=(1, 0.9),
-                readonly=True,
-                background_color=(1, 1, 1, 1),
-                foreground_color=(0, 0, 0, 1),
-                font_size=14,
-                hint_text="Logs will appear here...",
-                multiline=True,
-            )
-            layout.add_widget(self.log_output_area)
-
-            # Back to Main Button
-            button_back = MDRaisedButton(
-                text="Back to Main",
-                size_hint=(0.8, None),
-                height=50,
-                pos_hint={'center_x': 0.5, 'y': 0}
-            )
-            button_back.bind(on_press=self.switch_to_main)
-            layout.add_widget(button_back)
-
-            # Add the layout to the Log screen
-            self.add_widget(layout)
-
-        def switch_to_main(self, instance):
-            self.manager.current = 'main'
-
-        def log_output(self, message):
-            self.log_output_area.text += f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n"
-            self.log_output_area.cursor = (0, 0)  # Scroll to the bottom
-
-
-
-    class FileShareApp(MDApp):
-        def build(self):
-            # Rest of your app initialization
-            self.sm = ScreenManager()
-            self.sm.add_widget(MainScreen(name='main'))
-            self.sm.add_widget(LogScreen(name='logs'))
-            return self.sm
-
-        def log_output(self, message):
-            # Get the current log screen and call its log_output method
-            log_screen = self.sm.get_screen('logs')
-            log_screen.log_output(message)
-
-
-        def check_and_request_storage_permissions(self):
-            if platform =='linux'or platform == 'win':
-                return
-                
-            if not Environment.isExternalStorageManager():
-                self.show_storage_permission_dialog()
-            else:
-                print("Already have all files access permission")
+            self.is_running = True
+            logger.log(f"Server started on port {port} serving {directory}", "INFO")
             return True
+            
+        except OSError as e:
+            logger.log(f"Failed to start server: {e}", "ERROR")
+            return False
+        except Exception as e:
+            logger.log(f"Unexpected error starting server: {e}", "ERROR")
+            return False
+    
+    def stop(self) -> bool:
+        """Stop the HTTP server"""
+        if not self.is_running:
+            logger.log("Server not running", "WARNING")
+            return False
+        
+        try:
+            if self.server:
+                logger.log("Stopping server...", "INFO")
+                self.server.shutdown()
+                self.server.server_close()
+                
+                if self.server_thread and self.server_thread.is_alive():
+                    self.server_thread.join(timeout=5)
+                
+                self.server = None
+                self.server_thread = None
+                self.is_running = False
+                
+                logger.log("Server stopped", "INFO")
+                return True
+        except Exception as e:
+            logger.log(f"Error stopping server: {e}", "ERROR")
+            return False
+    
+    def get_local_ip(self) -> str:
+        """Get local IP address"""
+        try:
+            # Try to connect to external server to get IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            try:
+                # Fallback to hostname
+                return socket.gethostbyname(socket.gethostname())
+            except Exception:
+                return "127.0.0.1"
 
-        def show_storage_permission_dialog(self):
-            """Show dialog explaining why we need storage permission"""
+
+# ============================================================================
+# UI COMPONENTS
+# ============================================================================
+
+class StatusCard(MDCard):
+    """Reusable status card widget with enhanced design"""
+    
+    def __init__(self, title: str = "", icon: str = "", **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = dp(20)
+        self.spacing = dp(15)
+        self.elevation = 3
+        self.radius = [dp(20)]
+        self.md_bg_color = get_color_from_hex(COLORS['surface'])
+        self.ripple_behavior = True  # Add touch feedback
+        
+        # Header with icon
+        header = BoxLayout(
+            orientation='horizontal',
+            size_hint_y=None,
+            height=dp(40),
+            spacing=dp(10)
+        )
+        
+        if icon:
+            icon_widget = MDIcon(
+                icon=icon,
+                theme_text_color="Custom",
+                text_color=get_color_from_hex(COLORS['primary']),
+                font_size=sp(24)
+            )
+            header.add_widget(icon_widget)
+        
+        self.title_label = MDLabel(
+            text=title,
+            font_style="H6",
+            theme_text_color="Primary",
+            size_hint_y=None,
+            height=dp(40)
+        )
+        header.add_widget(self.title_label)
+        self.add_widget(header)
+        
+        # Content section
+        content_box = BoxLayout(
+            orientation='vertical',
+            padding=[0, dp(10)],
+            spacing=dp(5)
+        )
+        
+        self.content_label = MDLabel(
+            text="",
+            theme_text_color="Secondary",
+            halign="center",
+            font_style="Body1"
+        )
+        content_box.add_widget(self.content_label)
+        
+        # Status indicator
+        self.status_box = BoxLayout(
+            orientation='horizontal',
+            size_hint_y=None,
+            height=dp(30),
+            spacing=dp(5),
+            padding=[dp(10), 0],
+            opacity=0
+        )
+        
+        self.status_icon = MDIcon(
+            icon="circle",
+            theme_text_color="Custom",
+            text_color=get_color_from_hex(COLORS['success']),
+            size_hint_x=None,
+            width=dp(24)
+        )
+        self.status_box.add_widget(self.status_icon)
+        
+        self.status_label = MDLabel(
+            text="",
+            theme_text_color="Custom",
+            text_color=get_color_from_hex(COLORS['success']),
+            font_style="Caption"
+        )
+        self.status_box.add_widget(self.status_label)
+        content_box.add_widget(self.status_box)
+        
+        self.add_widget(content_box)
+    
+    def set_content(self, text: str, status: str = None):
+        """Update card content and status"""
+        self.content_label.text = text
+        
+        if status:
+            self.status_box.opacity = 1
+            self.status_label.text = status
+            
+            if status.lower() == "running":
+                color = COLORS['success']
+                self.status_icon.icon = "check-circle"
+            elif status.lower() == "stopped":
+                color = COLORS['error']
+                self.status_icon.icon = "stop-circle"
+            else:
+                color = COLORS['primary']
+                self.status_icon.icon = "information"
+            
+            self.status_icon.text_color = get_color_from_hex(color)
+            self.status_label.text_color = get_color_from_hex(color)
+        else:
+            self.status_box.opacity = 0
+
+
+# ============================================================================
+# SCREENS
+# ============================================================================
+
+class MainScreen(Screen):
+    """Main application screen"""
+    
+    def __init__(self, server_manager: ServerManager, **kwargs):
+        super().__init__(**kwargs)
+        self.server_manager = server_manager
+        self.qr_texture = None
+        self.build_ui()
+    
+    def build_ui(self):
+        """Build the main UI"""
+        layout = BoxLayout(orientation='vertical', spacing=dp(10))
+        
+        # Top App Bar with gradient
+        toolbar_box = BoxLayout(size_hint_y=None, height=dp(64))
+        with toolbar_box.canvas.before:
+            Color(rgba=get_color_from_hex(COLORS['primary']))
+            self.toolbar_rect = Rectangle(pos=toolbar_box.pos, size=toolbar_box.size)
+        
+        toolbar_box.bind(pos=self._update_rect, size=self._update_rect)
+        
+        toolbar = MDTopAppBar(
+            title="[b]PyServer[/b]",
+            use_overflow=True,
+            opposite_colors=True,
+            md_bg_color=(0, 0, 0, 0),  # Transparent background
+            specific_text_color=get_color_from_hex('#FFFFFF'),
+            elevation=0
+        )
+        toolbar_box.add_widget(toolbar)
+        layout.add_widget(toolbar_box)
+        
+        # Main content in ScrollView
+        scroll = ScrollView(do_scroll_x=False)
+        content = BoxLayout(
+            orientation='vertical',
+            padding=[dp(20), dp(10), dp(20), dp(20)],
+            spacing=dp(20),
+            size_hint_y=None
+        )
+        content.bind(minimum_height=content.setter('height'))
+        
+        # Hero section with server status
+        hero_card = MDCard(
+            orientation='vertical',
+            padding=dp(20),
+            spacing=dp(10),
+            size_hint_y=None,
+            height=dp(180),
+            elevation=3,
+            md_bg_color=get_color_from_hex(COLORS['surface'])
+        )
+        
+        status_icon = MDIcon(
+            icon="server",
+            font_size=sp(48),
+            theme_text_color="Custom",
+            text_color=get_color_from_hex(COLORS['primary']),
+            halign="center"
+        )
+        hero_card.add_widget(status_icon)
+        
+        self.status_text = MDLabel(
+            text="Server Status",
+            font_style="H5",
+            halign="center",
+            theme_text_color="Primary"
+        )
+        hero_card.add_widget(self.status_text)
+        
+        self.status_subtext = MDLabel(
+            text="Server is stopped",
+            theme_text_color="Secondary",
+            halign="center"
+        )
+        hero_card.add_widget(self.status_subtext)
+        
+        content.add_widget(hero_card)
+        
+        # Directory selection card
+        dir_card = MDCard(
+            orientation='vertical',
+            padding=dp(20),
+            spacing=dp(15),
+            size_hint_y=None,
+            height=dp(200),
+            elevation=2,
+            md_bg_color=get_color_from_hex(COLORS['surface'])
+        )
+        
+        dir_header = BoxLayout(
+            orientation='horizontal',
+            size_hint_y=None,
+            height=dp(30),
+            spacing=dp(10)
+        )
+        
+        dir_icon = MDIcon(
+            icon="folder",
+            theme_text_color="Custom",
+            text_color=get_color_from_hex(COLORS['primary'])
+        )
+        dir_header.add_widget(dir_icon)
+        
+        dir_title = MDLabel(
+            text="Select Directory",
+            font_style="H6",
+            theme_text_color="Primary"
+        )
+        dir_header.add_widget(dir_title)
+        dir_card.add_widget(dir_header)
+        
+        self.directory_input = MDTextField(
+            hint_text="Enter directory path",
+            helper_text="Example: /home/user/files",
+            helper_text_mode="persistent",
+            mode="rectangle",
+            size_hint_y=None,
+            height=dp(48)
+        )
+        dir_card.add_widget(self.directory_input)
+        
+        if kivy_platform == 'android':
+            hint_box = BoxLayout(
+                orientation='horizontal',
+                size_hint_y=None,
+                height=dp(30),
+                spacing=dp(5)
+            )
+            hint_icon = MDIcon(
+                icon="lightbulb-outline",
+                theme_text_color="Hint",
+                size_hint_x=None,
+                width=dp(24)
+            )
+            hint_box.add_widget(hint_icon)
+            
+            hint_label = MDLabel(
+                text="Internal Storage: /storage/emulated/0",
+                theme_text_color="Hint",
+                font_style="Caption"
+            )
+            hint_box.add_widget(hint_label)
+            dir_card.add_widget(hint_box)
+        
+        content.add_widget(dir_card)
+        
+        # QR Code section
+        qr_card = MDCard(
+            orientation='vertical',
+            padding=dp(20),
+            spacing=dp(15),
+            size_hint_y=None,
+            height=dp(300),
+            elevation=2,
+            md_bg_color=get_color_from_hex(COLORS['surface'])
+        )
+        
+        qr_header = BoxLayout(
+            orientation='horizontal',
+            size_hint_y=None,
+            height=dp(30),
+            spacing=dp(10)
+        )
+        
+        qr_icon = MDIcon(
+            icon="qrcode",
+            theme_text_color="Custom",
+            text_color=get_color_from_hex(COLORS['primary'])
+        )
+        qr_header.add_widget(qr_icon)
+        
+        qr_title = MDLabel(
+            text="Scan to Connect",
+            font_style="H6",
+            theme_text_color="Primary"
+        )
+        qr_header.add_widget(qr_title)
+        qr_card.add_widget(qr_header)
+        
+        qr_box = RelativeLayout(
+            size_hint_y=None,
+            height=dp(200)
+        )
+        
+        self.qr_image = Image(
+            size_hint=(None, None),
+            size=(dp(200), dp(200)),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5}
+        )
+        qr_box.add_widget(self.qr_image)
+        qr_card.add_widget(qr_box)
+        
+        content.add_widget(qr_card)
+        
+        # Action buttons
+        actions_layout = GridLayout(
+            cols=1,
+            spacing=dp(10),
+            padding=[0, dp(10)],
+            size_hint_y=None,
+            height=dp(200)
+        )
+        
+        self.btn_toggle = MDRaisedButton(
+            text="START SERVER",
+            icon="play",
+            font_size=sp(18),
+            size_hint=(1, None),
+            height=dp(56),
+            elevation=3,
+            md_bg_color=get_color_from_hex(COLORS['success']),
+            _radius=dp(28),
+            pos_hint={'center_x': 0.5}
+        )
+        self.btn_toggle.bind(on_press=self.toggle_server)
+        actions_layout.add_widget(self.btn_toggle)
+        
+        button_row = BoxLayout(
+            orientation='horizontal',
+            spacing=dp(10),
+            size_hint_y=None,
+            height=dp(48)
+        )
+        
+        btn_logs = MDRaisedButton(
+            text="VIEW LOGS",
+            icon="text-box-search",
+            size_hint_x=0.5,
+            height=dp(48),
+            elevation=2,
+            md_bg_color=get_color_from_hex(COLORS['primary']),
+            _radius=dp(24)
+        )
+        btn_logs.bind(on_press=self.goto_logs)
+        button_row.add_widget(btn_logs)
+        
+        self.btn_open = MDRaisedButton(
+            text="OPEN IN BROWSER",
+            icon="open-in-new",
+            size_hint_x=0.5,
+            height=dp(48),
+            elevation=2,
+            md_bg_color=get_color_from_hex(COLORS['secondary']),
+            _radius=dp(24),
+            disabled=True
+        )
+        self.btn_open.bind(on_press=self.open_browser)
+        button_row.add_widget(self.btn_open)
+        
+        actions_layout.add_widget(button_row)
+        content.add_widget(actions_layout)
+        
+        scroll.add_widget(content)
+        layout.add_widget(scroll)
+        
+        self.add_widget(layout)
+    
+    def _update_rect(self, instance, value):
+        """Update toolbar rectangle position and size"""
+        self.toolbar_rect.pos = instance.pos
+        self.toolbar_rect.size = instance.size
+    
+    def toggle_server(self, instance):
+        """Toggle server on/off"""
+        if self.server_manager.is_running:
+            self.stop_server()
+        else:
+            self.start_server()
+    
+    def start_server(self):
+        """Start the server"""
+        directory = self.directory_input.text.strip()
+        
+        if not directory:
+            self.show_snackbar("Please enter a directory path", error=True)
+            return
+        
+        if not os.path.isdir(directory):
+            self.show_snackbar("Invalid directory path", error=True)
+            return
+        
+        # Start server
+        success = self.server_manager.start(directory, DEFAULT_PORT)
+        
+        if success:
+            # Update UI
+            self.btn_toggle.text = "STOP SERVER"
+            self.btn_toggle.icon = "stop"
+            self.btn_toggle.md_bg_color = get_color_from_hex(COLORS['error'])
+            self.btn_open.disabled = False
+            
+            # Update status
+            ip = self.server_manager.get_local_ip()
+            port = self.server_manager.port
+            url = f"http://{ip}:{port}"
+            
+            self.status_text.text = "Server Running"
+            self.status_subtext.text = f"Available at {url}"
+            
+            # Generate QR code
+            self.generate_qr_code(url)
+            
+            self.show_snackbar("Server started successfully", error=False)
+        else:
+            self.show_snackbar("Failed to start server", error=True)
+    
+    def stop_server(self):
+        """Stop the server"""
+        success = self.server_manager.stop()
+        
+        if success:
+            # Update UI
+            self.btn_toggle.text = "START SERVER"
+            self.btn_toggle.icon = "play"
+            self.btn_toggle.md_bg_color = get_color_from_hex(COLORS['success'])
+            self.btn_open.disabled = True
+            
+            # Clear status
+            self.status_text.text = "Server Status"
+            self.status_subtext.text = "Server is stopped"
+            self.qr_image.texture = None
+            
+            self.show_snackbar("Server stopped", error=False)
+        else:
+            self.show_snackbar("Failed to stop server", error=True)
+    
+    def generate_qr_code(self, url: str):
+        """Generate QR code for the URL"""
+        try:
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(url)
+            qr.make(fit=True)
+            
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convert to Kivy texture
+            buf = BytesIO()
+            img.save(buf, format='PNG')
+            buf.seek(0)
+            
+            core_img = CoreImage(buf, ext='png')
+            self.qr_image.texture = core_img.texture
+            
+        except Exception as e:
+            logger.log(f"QR code generation error: {e}", "ERROR")
+    
+    def open_browser(self, instance):
+        """Open server URL in browser"""
+        if self.server_manager.is_running:
+            ip = self.server_manager.get_local_ip()
+            port = self.server_manager.port
+            url = f"http://{ip}:{port}"
+            
+            try:
+                webbrowser.open(url)
+            except Exception as e:
+                logger.log(f"Failed to open browser: {e}", "ERROR")
+                self.show_snackbar("Failed to open browser", error=True)
+    
+    def goto_logs(self, instance):
+        """Switch to logs screen"""
+        self.manager.current = 'logs'
+    
+    def show_snackbar(self, message: str, error: bool = False):
+        """Show a modern snackbar message"""
+        snackbar = Snackbar(
+            duration=2.5,
+            padding=[dp(15), dp(10)]
+        )
+        snackbar.snackbar_x = "10dp"
+        snackbar.snackbar_y = "10dp"
+        snackbar.size_hint_x = (Window.width - dp(20)) / Window.width
+        
+        # Create a horizontal layout for icon and text
+        box = BoxLayout(spacing=dp(10), size_hint_x=0.9)
+        
+        # Add icon based on message type
+        icon = MDIcon(
+            icon="check-circle" if not error else "alert-circle",
+            theme_text_color="Custom",
+            text_color=get_color_from_hex('#FFFFFF'),
+            size_hint_x=None,
+            width=dp(24)
+        )
+        box.add_widget(icon)
+        
+        # Add message text
+        label = MDLabel(
+            text=message,
+            theme_text_color="Custom",
+            text_color=get_color_from_hex('#FFFFFF')
+        )
+        box.add_widget(label)
+        
+        # Set snackbar properties
+        snackbar.bg_color = get_color_from_hex(COLORS['error'] if error else COLORS['success'])
+        snackbar.add_widget(box)
+        snackbar.open()
+
+
+class LogScreen(Screen):
+    """Logs screen"""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.build_ui()
+        
+        # Register log callback
+        logger.add_callback(self.on_new_log)
+    
+    def build_ui(self):
+        """Build logs UI"""
+        layout = BoxLayout(orientation='vertical', spacing=dp(5))
+        
+        # Top App Bar with gradient
+        toolbar_box = BoxLayout(size_hint_y=None, height=dp(64))
+        with toolbar_box.canvas.before:
+            Color(rgba=get_color_from_hex(COLORS['primary']))
+            self.toolbar_rect = Rectangle(pos=toolbar_box.pos, size=toolbar_box.size)
+        
+        toolbar_box.bind(pos=self._update_rect, size=self._update_rect)
+        
+        toolbar = MDTopAppBar(
+            title="[b]Server Logs[/b]",
+            md_bg_color=(0, 0, 0, 0),  # Transparent background
+            specific_text_color=get_color_from_hex('#FFFFFF'),
+            elevation=0,
+            left_action_items=[["arrow-left", lambda x: self.goto_main()]],
+            right_action_items=[["content-copy", lambda x: self.copy_logs()]]
+        )
+        toolbar_box.add_widget(toolbar)
+        layout.add_widget(toolbar_box)
+        
+        # Log content card
+        log_card = MDCard(
+            orientation='vertical',
+            padding=dp(10),
+            spacing=dp(10),
+            elevation=2,
+            md_bg_color=get_color_from_hex(COLORS['surface'])
+        )
+        
+        # Log header
+        log_header = BoxLayout(
+            orientation='horizontal',
+            size_hint_y=None,
+            height=dp(40),
+            padding=[dp(10), 0],
+            spacing=dp(10)
+        )
+        
+        log_icon = MDIcon(
+            icon="text-box-search",
+            theme_text_color="Custom",
+            text_color=get_color_from_hex(COLORS['primary'])
+        )
+        log_header.add_widget(log_icon)
+        
+        log_title = MDLabel(
+            text="Real-time Server Logs",
+            theme_text_color="Primary",
+            font_style="H6"
+        )
+        log_header.add_widget(log_title)
+        log_card.add_widget(log_header)
+        
+        # Search box
+        search_box = MDTextField(
+            icon_left="magnify",
+            hint_text="Search logs...",
+            helper_text="Type to filter logs",
+            helper_text_mode="persistent",
+            mode="rectangle",
+            size_hint_y=None,
+            height=dp(48),
+            padding=[dp(10), 0, dp(10), 0]
+        )
+        search_box.bind(text=self.filter_logs)
+        log_card.add_widget(search_box)
+        
+        # Log display
+        log_scroll = ScrollView()
+        self.log_text = TextInput(
+            text=logger.get_all_logs(),
+            readonly=True,
+            size_hint_y=None,
+            font_name='RobotoMono-Regular',
+            font_size=sp(14),
+            background_color=get_color_from_hex('#1E1E1E'),
+            foreground_color=get_color_from_hex('#FFFFFF'),
+            padding=[dp(15), dp(15)]
+        )
+        self.log_text.bind(minimum_height=self.log_text.setter('height'))
+        log_scroll.add_widget(self.log_text)
+        log_card.add_widget(log_scroll)
+        
+        layout.add_widget(log_card)
+        
+        # Action buttons in a card
+        action_card = MDCard(
+            orientation='horizontal',
+            padding=dp(10),
+            spacing=dp(10),
+            size_hint_y=None,
+            height=dp(80),
+            elevation=2,
+            md_bg_color=get_color_from_hex(COLORS['surface'])
+        )
+        
+        btn_clear = MDRaisedButton(
+            text="CLEAR LOGS",
+            icon="delete-sweep",
+            size_hint_x=0.5,
+            height=dp(50),
+            md_bg_color=get_color_from_hex(COLORS['error']),
+            _radius=dp(25)
+        )
+        btn_clear.bind(on_press=self.clear_logs)
+        action_card.add_widget(btn_clear)
+        
+        btn_back = MDRaisedButton(
+            text="BACK TO SERVER",
+            icon="arrow-left",
+            size_hint_x=0.5,
+            height=dp(50),
+            md_bg_color=get_color_from_hex(COLORS['primary']),
+            _radius=dp(25)
+        )
+        btn_back.bind(on_press=lambda x: self.goto_main())
+        action_card.add_widget(btn_back)
+        
+        layout.add_widget(action_card)
+        
+        self.add_widget(layout)
+    
+    def _update_rect(self, instance, value):
+        """Update toolbar rectangle position and size"""
+        self.toolbar_rect.pos = instance.pos
+        self.toolbar_rect.size = instance.size
+    
+    def copy_logs(self):
+        """Copy logs to clipboard"""
+        from kivy.core.clipboard import Clipboard
+        Clipboard.copy(self.log_text.text)
+        Snackbar(text="Logs copied to clipboard").open()
+    
+    def filter_logs(self, instance, value):
+        """Filter logs based on search text"""
+        if not value:
+            self.log_text.text = logger.get_all_logs()
+            return
+        
+        filtered_logs = []
+        for log in logger.logs:
+            if value.lower() in log.lower():
+                filtered_logs.append(log)
+        
+        self.log_text.text = "\n".join(filtered_logs)
+    
+    def on_new_log(self, log_entry: str):
+        """Handle new log entries"""
+        self.log_text.text += f"\n{log_entry}"
+        # Auto-scroll to bottom
+        self.log_text.cursor = (0, len(self.log_text.text))
+    
+    def clear_logs(self, instance):
+        """Clear all logs"""
+        logger.clear()
+        self.log_text.text = ""
+    
+    def goto_main(self):
+        """Switch to main screen"""
+        self.manager.current = 'main'
+
+
+# ============================================================================
+# MAIN APPLICATION
+# ============================================================================
+
+class PyServerApp(MDApp):
+    """Main application class"""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.server_manager = ServerManager()
+        
+        # Configure theme
+        self.theme_cls.primary_palette = "DeepPurple"
+        self.theme_cls.accent_palette = "Teal"
+        self.theme_cls.theme_style = "Light"
+        self.theme_cls.material_style = "M3"  # Material Design 3
+        
+        # Configure window
+        if not kivy_platform == 'android':
+            Window.size = (400, 700)  # Set default window size for desktop
+        Window.clearcolor = get_color_from_hex(COLORS['background'])
+    
+    def build(self):
+        """Build the application"""
+        # Check permissions on Android
+        if kivy_platform == 'android':
+            self.check_permissions()
+        
+        # Create screen manager
+        sm = ScreenManager()
+        sm.add_widget(MainScreen(self.server_manager, name='main'))
+        sm.add_widget(LogScreen(name='logs'))
+        
+        return sm
+    
+    def check_permissions(self):
+        """Check and request Android permissions"""
+        try:
+            # Check if we have all files access
+            if Build.VERSION.SDK_INT >= 30:  # Android 11+
+                if not Environment.isExternalStorageManager():
+                    self.request_all_files_access()
+                else:
+                    logger.log("Storage permissions granted", "INFO")
+            else:
+                # Request traditional storage permissions
+                permissions = [
+                    'android.permission.READ_EXTERNAL_STORAGE',
+                    'android.permission.WRITE_EXTERNAL_STORAGE',
+                    'android.permission.INTERNET'
+                ]
+                
+                for perm in permissions:
+                    if not check_permission(perm):
+                        request_permissions([perm])
+        except Exception as e:
+            logger.log(f"Permission check error: {e}", "ERROR")
+    
+    def request_all_files_access(self):
+        """Request all files access permission (Android 11+)"""
+        try:
             dialog = MDDialog(
                 title="Storage Permission Required",
-                text="This app needs permission to manage files in external storage. Please enable 'Allow all files access' in the next screen.",
+                text="This app needs access to manage files. Please grant 'All files access' permission in the next screen.",
                 buttons=[
                     MDFlatButton(
                         text="CANCEL",
                         on_release=lambda x: dialog.dismiss()
                     ),
-                    MDFlatButton(
-                        text="SETTINGS",
-                        on_release=lambda x: self.open_all_files_settings()
+                    MDRaisedButton(
+                        text="GRANT",
+                        on_release=lambda x: self.open_settings()
                     ),
                 ],
             )
             dialog.open()
+        except Exception as e:
+            logger.log(f"Permission dialog error: {e}", "ERROR")
+    
+    def open_settings(self):
+        """Open Android settings for all files access"""
+        try:
+            activity = PythonActivity.mActivity
+            intent = Intent()
+            intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            uri = Uri.fromParts("package", activity.getPackageName(), None)
+            intent.setData(uri)
+            activity.startActivity(intent)
+        except Exception as e:
+            logger.log(f"Failed to open settings: {e}", "ERROR")
+    
+    def on_stop(self):
+        """Clean up when app closes"""
+        if self.server_manager.is_running:
+            self.server_manager.stop()
+        logger.log("Application stopped", "INFO")
 
-        def open_all_files_settings(self):
-            """Open Android settings for all files access"""
-            if platform == 'android':
-                activity = PythonActivity.mActivity
-                
-                # Create intent for "All files access" settings page
-                intent = Intent()
-                intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                
-                # Set package URI
-                uri = Uri.fromParts("package", "com.share.server", None)
-                intent.setData(uri)
-                
-                # Start the settings activity
-                activity.startActivity(intent)
-                
-                # Schedule a check after returning from settings
-                Clock.schedule_once(self.check_permission_after_return, 1)
 
-        def check_permission_after_return(self, dt):
-            """Check if permission was granted after returning from settings"""
-            if platform == 'android':
-                if Environment.isExternalStorageManager():
-                    print("All files access permission granted!")
-                    # Proceed with your file operations
-                    self.initialize_storage()
-                else:
-                    print("All files access permission not granted")
-                    # Optionally show another dialog or handle denial
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
 
-        def on_start(self):
-            """Check permissions when app starts"""
-            self.check_and_request_storage_permissions()
-    if __name__ == '__main__':
-        FileShareApp().run()
-
-except Exception as e:
-    print(e)
+if __name__ == '__main__':
+    try:
+        PyServerApp().run()
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
