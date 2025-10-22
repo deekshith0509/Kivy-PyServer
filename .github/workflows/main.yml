@@ -36,7 +36,7 @@ jobs:
           python3 -m pip install --upgrade pip setuptools
           python3 -m pip install "Cython<3.0.0" buildozer
       
-      # Install Android SDK and NDK with proper structure
+      # Install Android SDK and NDK with manual NDK download
       - name: Install Android SDK and NDK
         run: |
           mkdir -p ~/.buildozer/android/platform
@@ -56,43 +56,58 @@ jobs:
           
           # Accept licenses and install components
           yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
-          sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33" "ndk;25.2.9519653"
+          sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
           
-          # Create symlink for old tools directory that Buildozer expects
-          mkdir -p $ANDROID_HOME/tools
-          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin $ANDROID_HOME/tools/bin
+          # Manually download and install NDK to avoid Buildozer download issues
+          cd $ANDROID_HOME
+          wget https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
+          unzip -q android-ndk-r25b-linux.zip
+          rm android-ndk-r25b-linux.zip
+          mv android-ndk-r25b ndk/25.2.9519653
           
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
       
-      # Initialize Buildozer if needed
-      - name: Initialize Buildozer
+      # Only update the SDK and NDK paths in the existing spec file
+      - name: Update Buildozer paths
         run: |
-          if [ ! -f buildozer.spec ]; then
-            buildozer init
-          fi
-      
-      # Configure Buildozer with proper paths
-      - name: Configure Buildozer
-        run: |
-          # Remove existing SDK/NDK paths if they exist
+          # Remove existing SDK/NDK path lines if they exist
           sed -i '/^android.sdk_path/d' buildozer.spec
           sed -i '/^android.ndk_path/d' buildozer.spec
           
-          # Add correct paths
+          # Add the correct paths at the end of the file
           echo "" >> buildozer.spec
-          echo "# Android SDK and NDK paths" >> buildozer.spec
+          echo "# CI/CD paths" >> buildozer.spec
           echo "android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk" >> buildozer.spec
           echo "android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> buildozer.spec
       
-      # Build the APK directly without initialization steps
+      # Pre-initialize python-for-android
+      - name: Pre-initialize python-for-android
+        run: |
+          export ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          
+          # Clone python-for-android manually
+          mkdir -p .buildozer/android/platform
+          git clone -b master --single-branch https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android
+          cd .buildozer/android/platform/python-for-android
+          pip install -e .
+          cd -
+      
+      # Build the APK
       - name: Build Android APK
         run: |
           export ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          
+          # Set environment variables for Buildozer
+          export BUILDOZER_ANDROID_SDK_HOME=$ANDROID_HOME
+          export BUILDOZER_ANDROID_NDK_HOME=$ANDROID_NDK_HOME
           
           # Build the APK with verbose output
           buildozer -v android debug
