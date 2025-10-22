@@ -23,15 +23,20 @@ jobs:
         with:
           python-version: '3.10'
       
-      # Install Buildozer and dependencies
+      # Install Buildozer and dependencies (pin Cython to 0.29.x to avoid pyjnius compile errors)
       - name: Install Buildozer and dependencies
         run: |
           sudo apt update && sudo apt install -y \
             python3-pip python3-setuptools python3-wheel git zip unzip zlib1g-dev \
             libncurses5 libffi-dev libssl-dev liblzma-dev libgdbm-dev libbz2-dev libreadline-dev \
-            libsqlite3-dev libffi-dev libgdbm-compat-dev curl
-          python3 -m pip install --upgrade pip setuptools cython
+            libsqlite3-dev libgdbm-compat-dev curl
+          python3 -m pip install --upgrade pip setuptools
+          # Pin Cython to the 0.29 branch (Cython < 3) to avoid "undeclared name not builtin: long"
+          python3 -m pip install "Cython<3.0.0" cython==0.29.37
+          # Optionally pin pyjnius to a newer version that supports Cython 3 if you want that route:
+          # python3 -m pip install "pyjnius>=1.5.0"
           python3 -m pip install buildozer
+
       
       # Set up Android SDK and NDK
       - name: Install Android SDK and NDK
