@@ -4,7 +4,7 @@ on:
     branches: [main]
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       # Checkout the repository
       - name: Checkout Code
@@ -60,4 +60,5 @@ jobs:
         with:
           name: android-apk
           path: bin/*.apk
+
 
