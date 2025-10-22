@@ -60,22 +60,31 @@ jobs:
             buildozer init
           fi
       
-      # Create proper Buildozer configuration
+      # Configure Buildozer with proper paths
       - name: Configure Buildozer
         run: |
-          # Create buildozer configuration directory
-          mkdir -p ~/.buildozer
-          
           # Update buildozer.spec with correct paths
-          sed -i '/^android.sdk_path/d' buildozer.spec
-          sed -i '/^android.ndk_path/d' buildozer.spec
-          echo "android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk" >> buildozer.spec
-          echo "android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> buildozer.spec
+          cat >> buildozer.spec << EOF
+
+# Android SDK and NDK paths
+android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
+android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653
+EOF
+      
+      # Initialize python-for-android first
+      - name: Initialize python-for-android
+        run: |
+          export ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           
-          # Also set in environment for good measure
-          echo "export ANDROIDSDK=/home/runner/.buildozer/android/platform/android-sdk" >> ~/.bashrc
-          echo "export ANDROIDNDK=/home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> ~/.bashrc
-          source ~/.bashrc
+          # Create the directory structure manually first
+          mkdir -p .buildozer/android/platform/python-for-android
+          
+          # Run a simple buildozer command to initialize p4a
+          buildozer android --version || true
+          buildozer android list_targets || true
       
       # Build the APK
       - name: Build Android APK
@@ -85,10 +94,8 @@ jobs:
           export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           
-          # Force Buildozer to use existing NDK
-          buildozer android clean
-          buildozer android update
-          buildozer android debug
+          # Build the APK
+          buildozer -v android debug
       
       # Upload APK artifact
       - name: Upload APK
