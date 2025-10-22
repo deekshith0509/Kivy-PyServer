@@ -75,6 +75,11 @@ jobs:
           sed -i "s|^#* *android.ndk_path *=.*|android.ndk_path = $ANDROIDNDK|" buildozer.spec
           echo "Updated buildozer.spec to use preinstalled SDK and NDK"
           grep "android.*_path" buildozer.spec || true
+      - name: Set SDK and NDK paths in buildozer.spec
+        run: |
+          sed -i "s|^#* *android.sdk_path *=.*|android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk|" buildozer.spec
+          sed -i "s|^#* *android.ndk_path *=.*|android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653|" buildozer.spec
+          grep "android.*_path" buildozer.spec
 
       # Build Android APK
       - name: Build Android APK
