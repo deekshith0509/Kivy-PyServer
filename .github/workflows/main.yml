@@ -28,15 +28,8 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 4️⃣ Create virtual environment & upgrade pip/setuptools
-      - name: Create Python virtualenv
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install --upgrade pip setuptools cython wheel
-
-      # 5️⃣ Install system dependencies including libffi-dev
-      - name: Install Buildozer & Android dependencies
+      # 4️⃣ Install system dependencies including autotools
+      - name: Install system dependencies
         run: |
           sudo apt update
           sudo apt install -y \
@@ -44,62 +37,105 @@ jobs:
             libffi-dev pkg-config git zip unzip openjdk-17-jdk \
             virtualenv build-essential libsqlite3-dev sqlite3 \
             bzip2 libbz2-dev zlib1g-dev libssl-dev libncurses-dev \
-            libncursesw5-dev libreadline-dev libsqlite3-dev \
-            libgdbm-dev libdb5.3-dev libbz2-dev libexpat1-dev \
-            liblzma-dev libffi-dev libtool pkg-config libgl1 \
-            libgles2 autoconf automake cmake curl unzip
+            libncursesw5-dev libreadline-dev libgdbm-dev libdb5.3-dev \
+            liblzma-dev libtool autoconf automake cmake curl \
+            libgl1 libgles2
 
-      # 6️⃣ Install Buildozer & latest python-for-android
+      # 5️⃣ Create virtual environment & upgrade pip/setuptools
+      - name: Create Python virtualenv
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip setuptools cython wheel
+
+      # 6️⃣ Install Buildozer & python-for-android
       - name: Install Buildozer & P4A
         run: |
           source .venv/bin/activate
-          pip install --upgrade buildozer python-for-android
+          pip install --upgrade buildozer
+          pip install --upgrade git+https://github.com/kivy/python-for-android.git
 
-      # 7️⃣ Accept SDK licenses & preinstall Android NDK
-      - name: Prepare Android SDK & NDK
-        run: |
-          source .venv/bin/activate
-          mkdir -p ~/.android
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
-
-          # Preinstall NDK 25b manually
-          mkdir -p ~/.buildozer/android/platform
-          cd ~/.buildozer/android/platform
-          curl -L -o ndk.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
-          unzip -q ndk.zip
-          mv android-ndk-r25b android-ndk
-          rm ndk.zip
-          cd -
-
-          # Retry SDK update if necessary
-          for i in 1; do
-            yes | buildozer android update --sdk_dir=$HOME/.buildozer/android/platform/android-sdk && break || sleep 30
-          done
-
-      # 8️⃣ Initialize Buildozer spec if missing and force accept license
+      # 7️⃣ Initialize Buildozer spec if missing
       - name: Initialize buildozer.spec
         run: |
           source .venv/bin/activate
           if [ ! -f buildozer.spec ]; then
             buildozer init
           fi
-          sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/g' buildozer.spec
+
+      # 8️⃣ Configure buildozer.spec for system libffi
+      - name: Configure buildozer spec
+        run: |
+          # Ensure API and NDK are set
           sed -i 's/^#android.api =.*/android.api = 33/g' buildozer.spec
-          # Force Python-for-Android to use system libffi
-          if ! grep -q "p4a.system_libffi = True" buildozer.spec; then
-            echo "p4a.system_libffi = True" >> buildozer.spec
+          sed -i 's/^android.ndk =.*/android.ndk = 25b/g' buildozer.spec
+          sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/g' buildozer.spec
+          
+          # Add p4a.local_recipes to use system libffi
+          if ! grep -q "p4a.local_recipes" buildozer.spec; then
+            echo "" >> buildozer.spec
+            echo "# Force python-for-android to skip libffi build" >> buildozer.spec
+            echo "p4a.local_recipes = recipes" >> buildozer.spec
           fi
 
-      # 9️⃣ Build the APK
+      # 9️⃣ Create custom recipe to skip libffi
+      - name: Create custom libffi recipe
+        run: |
+          mkdir -p recipes/libffi
+          cat > recipes/libffi/__init__.py << 'EOF'
+          from pythonforandroid.recipe import Recipe
+          from pythonforandroid.util import current_directory
+          from os.path import join
+          import sh
+
+          class LibffiRecipe(Recipe):
+              version = 'system'
+              url = None
+              
+              def build_arch(self, arch):
+                  # Use system libffi - skip build
+                  super().build_arch(arch)
+                  
+              def get_recipe_env(self, arch):
+                  env = super().get_recipe_env(arch)
+                  # Point to system libffi
+                  env['LDFLAGS'] = env.get('LDFLAGS', '') + ' -lffi'
+                  env['CFLAGS'] = env.get('CFLAGS', '') + ' -I/usr/include'
+                  return env
+
+          recipe = LibffiRecipe()
+          EOF
+
+      # 🔟 Accept SDK licenses & setup Android environment
+      - name: Prepare Android SDK
+        run: |
+          source .venv/bin/activate
+          mkdir -p ~/.android
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
+          
+          # Let buildozer handle NDK download
+          export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk
+
+      # 1️⃣1️⃣ Build the APK with verbose logging
       - name: Build APK
         run: |
           source .venv/bin/activate
           export PATH=$PATH:~/.local/bin
-          buildozer android debug
+          buildozer -v android debug
 
-      # 🔟 Upload APK artifact
+      # 1️⃣2️⃣ Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: bin/*.apk
+        if: success()
+
+      # 1️⃣3️⃣ Upload build log on failure
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildozer-log
+          path: .buildozer/android/platform/build-*/build.log
+        if: failure()
