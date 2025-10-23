@@ -23,56 +23,54 @@ jobs:
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10.14'
-
-      - name: Install legacy autoconf and libtool
-        run: |
-          sudo apt update
-          sudo apt install -y autoconf2.69 libtool-bin build-essential pkg-config
-
-          # Set autoconf to use legacy version
-          sudo update-alternatives --install /usr/bin/autoconf autoconf /usr/bin/autoconf2.69 50
-          sudo update-alternatives --config autoconf
+          python-version: '3.10'
 
       - name: Create Python virtualenv & upgrade pip
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install --upgrade pip setuptools cython wheel
+          pip install --upgrade pip setuptools cython
 
-      - name: Install Buildozer & python-for-android
+      - name: Install Buildozer dependencies (apt)
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            python3-pip python3-setuptools python3-wheel libffi-dev pkg-config \
+            git zip unzip openjdk-17-jdk \
+            virtualenv \
+            build-essential libsqlite3-dev sqlite3 bzip2 libbz2-dev \
+            zlib1g-dev libssl-dev libncurses-dev libncursesw5-dev \
+            libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev \
+            libbz2-dev libexpat1-dev liblzma-dev libffi-dev \
+            libtool pkg-config libgl1 libgles2 autoconf automake \
+            cmake
+          # Note: libtinfo5 is removed in Ubuntu 24.04 -> use libncurses-dev
+
+      - name: Install Buildozer
         run: |
           source .venv/bin/activate
-          pip install --upgrade buildozer==1.5.0 python-for-android==2024.7.1
+          pip install --upgrade buildozer
 
-      - name: Install Buildozer system dependencies
+      - name: Accept SDK licenses and prepare environment
         run: |
-          sudo apt install -y \
-            git zip unzip zlib1g-dev libncurses-dev libbz2-dev \
-            libssl-dev libreadline-dev libffi-dev libsqlite3-dev \
-            libgdbm-dev libdb5.3-dev liblzma-dev libtool pkg-config \
-            libgl1 libgles2 autoconf automake cmake bison flex
+          source .venv/bin/activate
+          mkdir -p ~/.android
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
 
-      - name: Preinstall Android NDK & SDK
-        run: |
+          # Preinstall NDK manually to avoid download bug
           mkdir -p ~/.buildozer/android/platform
           cd ~/.buildozer/android/platform
-
-          # NDK r25b
-          curl -L -o android-ndk.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
-          unzip -q android-ndk.zip
+          echo "Downloading Android NDK 25b..."
+          curl -L -o ndk.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
+          unzip -q ndk.zip
           mv android-ndk-r25b android-ndk
-          rm android-ndk.zip
+          rm ndk.zip
 
-          # SDK Commandline Tools (latest stable)
-          curl -L -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q cmdline-tools.zip
-          mv cmdline-tools cmdline-tools
-          rm cmdline-tools.zip
-
-      - name: Clean Buildozer cache
-        run: |
-          rm -rf ~/.buildozer/cache ~/.buildozer/android/platform/build-*
+          # Proceed with SDK install/update (use retries)
+          cd -
+          for i in 1 2 3; do
+            yes | buildozer android update --sdk_dir=$HOME/.buildozer/android/platform/android-sdk && break || sleep 30
+          done
 
       - name: Initialize Buildozer spec if needed
         run: |
@@ -90,25 +88,11 @@ jobs:
             fi
           fi
 
-          # Force system libffi to avoid AC_TRY_LINK errors
-          if ! grep -q "android.use_system_libffi" buildozer.spec; then
-            echo "android.use_system_libffi = True" >> buildozer.spec
-          fi
-
-          # Set pinned Python version
-          sed -i 's/^requirements = .*/requirements = python3==3.10.14,kivy,qrcode,plyer,kivymd==1.1.1,Pillow,requests,pyjnius,setuptools,libffi/' buildozer.spec
-
-          # Set NDK path
-          if ! grep -q "android.ndk_path" buildozer.spec; then
-            echo "android.ndk_path = ~/.buildozer/android/platform/android-ndk" >> buildozer.spec
-            echo "android.ndk_version = 25b" >> buildozer.spec
-          fi
-
       - name: Build APK
         run: |
           source .venv/bin/activate
           export PATH=$PATH:~/.local/bin
-          buildozer android debug --verbose --force-download
+          buildozer android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
