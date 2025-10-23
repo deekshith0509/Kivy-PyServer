@@ -72,7 +72,7 @@ jobs:
           cd -
 
           # Retry SDK update if necessary
-          for i in 1 2 3; do
+          for i in 1; do
             yes | buildozer android update --sdk_dir=$HOME/.buildozer/android/platform/android-sdk && break || sleep 30
           done
 
