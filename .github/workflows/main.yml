@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     steps:
       # 1️⃣ Checkout code
@@ -22,109 +22,143 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3️⃣ Set up Python 3.10
-      - name: Set up Python 3.10
+      # 3️⃣ Set up Python 3.9 (better compatibility with Kivy build chain)
+      - name: Set up Python 3.9
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.9'
 
-      # 4️⃣ Install system dependencies including autotools
+      # 4️⃣ Install system dependencies with libtool-bin
       - name: Install system dependencies
         run: |
           sudo apt update
           sudo apt install -y \
-            python3-pip python3-setuptools python3-wheel \
-            libffi-dev pkg-config git zip unzip openjdk-17-jdk \
-            virtualenv build-essential libsqlite3-dev sqlite3 \
-            bzip2 libbz2-dev zlib1g-dev libssl-dev libncurses-dev \
-            libncursesw5-dev libreadline-dev libgdbm-dev libdb5.3-dev \
-            liblzma-dev libtool autoconf automake cmake curl \
-            libgl1 libgles2
+            git zip unzip openjdk-17-jdk build-essential \
+            libssl-dev libffi-dev python3-dev \
+            zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
+            libsqlite3-dev libreadline-dev libbz2-dev \
+            ccache autoconf libtool libtool-bin automake pkg-config
 
-      # 5️⃣ Create virtual environment & upgrade pip/setuptools
+      # 5️⃣ Create virtual environment
       - name: Create Python virtualenv
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install --upgrade pip setuptools cython wheel
+          pip install --upgrade pip setuptools wheel
+          pip install Cython==0.29.36
 
-      # 6️⃣ Install Buildozer & python-for-android
-      - name: Install Buildozer & P4A
+      # 6️⃣ Install Buildozer
+      - name: Install Buildozer
         run: |
           source .venv/bin/activate
-          pip install --upgrade buildozer
-          pip install --upgrade git+https://github.com/kivy/python-for-android.git
+          pip install buildozer==1.5.0
 
-      # 7️⃣ Initialize Buildozer spec if missing
-      - name: Initialize buildozer.spec
-        run: |
-          source .venv/bin/activate
-          if [ ! -f buildozer.spec ]; then
-            buildozer init
-          fi
+      # 7️⃣ Cache Buildozer directory
+      - name: Cache Buildozer directory
+        uses: actions/cache@v3
+        with:
+          path: |
+            .buildozer/android/platform/android-sdk
+            .buildozer/android/platform/android-ndk
+            .buildozer/android/platform/apache-ant
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v3
 
-      # 8️⃣ Configure buildozer.spec for system libffi
-      - name: Configure buildozer spec
+      # 8️⃣ Fix buildozer.spec
+      - name: Update buildozer.spec
         run: |
-          # Ensure API and NDK are set
-          sed -i 's/^#android.api =.*/android.api = 33/g' buildozer.spec
+          # Ensure proper configuration
           sed -i 's/^android.ndk =.*/android.ndk = 25b/g' buildozer.spec
+          sed -i 's/^android.api =.*/android.api = 33/g' buildozer.spec
           sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/g' buildozer.spec
           
-          # Add p4a.local_recipes to use system libffi
-          if ! grep -q "p4a.local_recipes" buildozer.spec; then
-            echo "" >> buildozer.spec
-            echo "# Force python-for-android to skip libffi build" >> buildozer.spec
-            echo "p4a.local_recipes = recipes" >> buildozer.spec
-          fi
+          # Simplify Python requirements to avoid issues
+          sed -i 's/^requirements = .*/requirements = python3,kivy==2.2.1,pillow,plyer,kivymd==1.1.1,qrcode,requests/g' buildozer.spec
+          
+          # Remove problematic requirements
+          sed -i 's/,pyjnius//g' buildozer.spec
+          sed -i 's/,setuptools//g' buildozer.spec
+          sed -i 's/python3==3.10.0/python3/g' buildozer.spec
 
-      # 9️⃣ Create custom recipe to skip libffi
-      - name: Create custom libffi recipe
-        run: |
-          mkdir -p recipes/libffi
-          cat > recipes/libffi/__init__.py << 'EOF'
-          from pythonforandroid.recipe import Recipe
-          from pythonforandroid.util import current_directory
-          from os.path import join
-          import sh
-
-          class LibffiRecipe(Recipe):
-              version = 'system'
-              url = None
-              
-              def build_arch(self, arch):
-                  # Use system libffi - skip build
-                  super().build_arch(arch)
-                  
-              def get_recipe_env(self, arch):
-                  env = super().get_recipe_env(arch)
-                  # Point to system libffi
-                  env['LDFLAGS'] = env.get('LDFLAGS', '') + ' -lffi'
-                  env['CFLAGS'] = env.get('CFLAGS', '') + ' -I/usr/include'
-                  return env
-
-          recipe = LibffiRecipe()
-          EOF
-
-      # 🔟 Accept SDK licenses & setup Android environment
-      - name: Prepare Android SDK
+      # 9️⃣ Initialize Android SDK
+      - name: Initialize SDK
         run: |
           source .venv/bin/activate
           mkdir -p ~/.android
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
-          
-          # Let buildozer handle NDK download
-          export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-          export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk
 
-      # 1️⃣1️⃣ Build the APK with verbose logging
+      # 🔟 Pre-download and patch libffi
+      - name: Patch libffi build
+        run: |
+          source .venv/bin/activate
+          
+          # Initialize buildozer (downloads p4a)
+          timeout 300 buildozer android update || true
+          
+          # Wait for p4a to exist
+          for i in {1..30}; do
+            if [ -d ".buildozer/android/platform/python-for-android" ]; then
+              break
+            fi
+            echo "Waiting for p4a... ($i/30)"
+            sleep 2
+          done
+          
+          P4A_LIBFFI=".buildozer/android/platform/python-for-android/pythonforandroid/recipes/libffi/__init__.py"
+          
+          if [ -f "$P4A_LIBFFI" ]; then
+            echo "Found libffi recipe, patching..."
+            
+            # Backup original
+            cp "$P4A_LIBFFI" "$P4A_LIBFFI.bak"
+            
+            # Replace the build_arch method to skip autoreconf
+            cat > "$P4A_LIBFFI" << 'LIBFFI_PATCH'
+from pythonforandroid.recipe import Recipe
+from pythonforandroid.util import current_directory
+from os.path import join
+import sh
+
+class LibffiRecipe(Recipe):
+    version = '3.4.4'
+    url = 'https://github.com/libffi/libffi/releases/download/v{version}/libffi-{version}.tar.gz'
+    patches = []
+    built_libraries = {'libffi.so': '.libs'}
+
+    def build_arch(self, arch):
+        super().build_arch(arch)
+        env = self.get_recipe_env(arch)
+        
+        with current_directory(self.get_build_dir(arch.arch)):
+            # Use configure directly without autogen.sh
+            configure = sh.Command('./configure')
+            shprint = sh.Command('echo')
+            
+            shprint(configure,
+                    '--host=' + arch.toolchain_prefix,
+                    '--prefix=' + self.get_build_dir(arch.arch),
+                    '--disable-builddir',
+                    '--enable-shared',
+                    _env=env)
+            
+            shprint(sh.make, '-j4', _env=env)
+            shprint(sh.make, 'install', _env=env)
+
+recipe = LibffiRecipe()
+LIBFFI_PATCH
+            
+            echo "✅ Patched libffi recipe to skip autoreconf"
+          else
+            echo "⚠️  libffi recipe not found yet, will use default"
+          fi
+
+      # 1️⃣1️⃣ Build APK
       - name: Build APK
         run: |
           source .venv/bin/activate
-          export PATH=$PATH:~/.local/bin
+          export USE_CCACHE=1
           buildozer -v android debug
 
-      # 1️⃣2️⃣ Upload APK artifact
+      # 1️⃣2️⃣ Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -132,10 +166,12 @@ jobs:
           path: bin/*.apk
         if: success()
 
-      # 1️⃣3️⃣ Upload build log on failure
-      - name: Upload build log
+      # 1️⃣3️⃣ Upload logs on failure
+      - name: Upload logs
         uses: actions/upload-artifact@v4
         with:
-          name: buildozer-log
-          path: .buildozer/android/platform/build-*/build.log
+          name: build-logs
+          path: |
+            .buildozer/android/platform/build-*/build.log
+            .buildozer/logs/
         if: failure()
