@@ -51,12 +51,26 @@ jobs:
           source .venv/bin/activate
           pip install --upgrade buildozer
 
-      - name: Accept SDK licences & prepare Android SDK
+      - name: Accept SDK licenses and prepare environment
         run: |
           source .venv/bin/activate
           mkdir -p ~/.android
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
-          yes | buildozer android update --sdk_dir=$HOME/.buildozer/android/platform/android-sdk
+
+          # Preinstall NDK manually to avoid download bug
+          mkdir -p ~/.buildozer/android/platform
+          cd ~/.buildozer/android/platform
+          echo "Downloading Android NDK 25b..."
+          curl -L -o ndk.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
+          unzip -q ndk.zip
+          mv android-ndk-r25b android-ndk
+          rm ndk.zip
+
+          # Proceed with SDK install/update (use retries)
+          cd -
+          for i in 1 2 3; do
+            yes | buildozer android update --sdk_dir=$HOME/.buildozer/android/platform/android-sdk && break || sleep 30
+          done
 
       - name: Initialize Buildozer spec if needed
         run: |
