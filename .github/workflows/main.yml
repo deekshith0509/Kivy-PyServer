@@ -1,118 +1,85 @@
-name: CI
+name: Build Kivy APK
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-    
+    runs-on: ubuntu-24.04
+
     steps:
-      # Checkout code
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
-      
-      # Set up Java 17
-      - name: Set up Java 17
+
+      - name: Set up Temurin Java 17
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
-      
-      # Set up Python 3.10
-      - name: Set up Python
+
+      - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      
-      # Install Buildozer and dependencies
-      - name: Install Buildozer dependencies
+
+      - name: Create Python virtualenv & upgrade pip
         run: |
-          sudo apt update && sudo apt install -y \
-            python3-pip python3-setuptools python3-wheel git zip unzip zlib1g-dev \
-            libncurses5 libffi-dev libssl-dev liblzma-dev libgdbm-dev libbz2-dev libreadline-dev \
-            libsqlite3-dev libgdbm-compat-dev curl
-          python3 -m pip install --upgrade pip setuptools
-          python3 -m pip install "Cython<3.0.0" buildozer
-      
-      # Install Android SDK and NDK with manual NDK download
-      - name: Install Android SDK and NDK
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip setuptools cython
+
+      - name: Install Buildozer dependencies (apt)
         run: |
-          mkdir -p ~/.buildozer/android/platform
-          cd ~/.buildozer/android/platform
-          
-          # Download and install command line tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip
-          rm cmdline-tools.zip
-          mkdir -p android-sdk/cmdline-tools
-          mv cmdline-tools android-sdk/cmdline-tools/latest
-          
-          # Set environment variables
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          
-          # Accept licenses and install components
-          yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
-          sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
-          
-          # Manually download and install NDK to avoid Buildozer download issues
-          cd $ANDROID_HOME
-          wget https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
-          unzip -q android-ndk-r25b-linux.zip
-          rm android-ndk-r25b-linux.zip
-          mv android-ndk-r25b ndk/25.2.9519653
-          
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
-      
-      # Only update the SDK and NDK paths in the existing spec file
-      - name: Update Buildozer paths
+          sudo apt update
+          sudo apt install -y \
+            python3-pip python3-setuptools python3-wheel \
+            git zip unzip openjdk-17-jdk \
+            virtualenv \
+            build-essential libsqlite3-dev sqlite3 bzip2 libbz2-dev \
+            zlib1g-dev libssl-dev libncurses-dev libncursesw5-dev \
+            libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev \
+            libbz2-dev libexpat1-dev liblzma-dev libffi-dev \
+            libtool pkg-config libgl1 libgles2 autoconf automake \
+            cmake
+          # Note: libtinfo5 is removed in Ubuntu 24.04 -> use libncurses-dev
+
+      - name: Install Buildozer
         run: |
-          # Remove existing SDK/NDK path lines if they exist
-          sed -i '/^android.sdk_path/d' buildozer.spec
-          sed -i '/^android.ndk_path/d' buildozer.spec
-          
-          # Add the correct paths at the end of the file
-          echo "" >> buildozer.spec
-          echo "# CI/CD paths" >> buildozer.spec
-          echo "android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk" >> buildozer.spec
-          echo "android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653" >> buildozer.spec
-      
-      # Pre-initialize python-for-android
-      - name: Pre-initialize python-for-android
+          source .venv/bin/activate
+          pip install --upgrade buildozer
+
+      - name: Accept SDK licences & prepare Android SDK
         run: |
-          export ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          
-          # Clone python-for-android manually
-          mkdir -p .buildozer/android/platform
-          git clone -b master --single-branch https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android
-          cd .buildozer/android/platform/python-for-android
-          pip install -e .
-          cd -
-      
-      # Build the APK
-      - name: Build Android APK
+          source .venv/bin/activate
+          mkdir -p ~/.android
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
+          yes | buildozer android update --sdk_dir=$HOME/.buildozer/android/platform/android-sdk
+
+      - name: Initialize Buildozer spec if needed
         run: |
-          export ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          
-          # Set environment variables for Buildozer
-          export BUILDOZER_ANDROID_SDK_HOME=$ANDROID_HOME
-          export BUILDOZER_ANDROID_NDK_HOME=$ANDROID_NDK_HOME
-          
-          # Build the APK with verbose output
-          buildozer -v android debug
-      
-      # Upload APK artifact
+          source .venv/bin/activate
+          if [ ! -f buildozer.spec ]; then
+            buildozer init
+            sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/g' buildozer.spec
+            sed -i 's/^android.api =.*/android.api = 33/g' buildozer.spec
+          else
+            if ! grep -q "android.accept_sdk_license = True" buildozer.spec; then
+              sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/g' buildozer.spec
+              if ! grep -q "android.accept_sdk_license" buildozer.spec; then
+                echo "android.accept_sdk_license = True" >> buildozer.spec
+              fi
+            fi
+          fi
+
+      - name: Build APK
+        run: |
+          source .venv/bin/activate
+          export PATH=$PATH:~/.local/bin
+          buildozer android debug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
