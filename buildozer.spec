@@ -43,6 +43,8 @@ android.logcat = True
 android.deploy = false
 
 # Use system libffi to avoid autoreconf issues
-p4a.system_libffi = True
+[p4a]
+system_libffi = True
+
 
 
