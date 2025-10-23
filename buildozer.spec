@@ -7,7 +7,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,dm
 
 # Python requirements
-requirements = python3==3.10,kivy,qrcode,plyer,kivymd==1.1.1,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi
+requirements = python3==3.10.0,kivy,qrcode,plyer,kivymd==1.1.1,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi
 
 # Display settings
 orientation = portrait
@@ -41,4 +41,5 @@ warn_on_root = 1
 android.allow_backup = True
 android.logcat = True
 android.deploy = false
+
 
