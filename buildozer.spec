@@ -7,7 +7,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,dm
 
 # Python requirements
-requirements = python3==3.10.0,kivy,qrcode,plyer,kivymd==1.1.1,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools,libffi
+requirements = python3==3.10.0,kivy,qrcode,plyer,kivymd==1.1.1,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools
 
 # Display settings
 orientation = portrait
@@ -45,6 +45,7 @@ android.deploy = false
 # Use system libffi to avoid autoreconf issues
 [p4a]
 system_libffi = True
+
 
 
 
