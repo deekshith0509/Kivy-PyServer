@@ -107,48 +107,36 @@ jobs:
           
           if [ -f "$P4A_LIBFFI" ]; then
             echo "Found libffi recipe, patching..."
-            
-            # Backup original
             cp "$P4A_LIBFFI" "$P4A_LIBFFI.bak"
             
-            # Replace the build_arch method to skip autoreconf
-            cat > "$P4A_LIBFFI" << 'LIBFFI_PATCH'
-from pythonforandroid.recipe import Recipe
-from pythonforandroid.util import current_directory
-from os.path import join
-import sh
-
-class LibffiRecipe(Recipe):
-    version = '3.4.4'
-    url = 'https://github.com/libffi/libffi/releases/download/v{version}/libffi-{version}.tar.gz'
-    patches = []
-    built_libraries = {'libffi.so': '.libs'}
-
-    def build_arch(self, arch):
-        super().build_arch(arch)
-        env = self.get_recipe_env(arch)
-        
-        with current_directory(self.get_build_dir(arch.arch)):
-            # Use configure directly without autogen.sh
-            configure = sh.Command('./configure')
-            shprint = sh.Command('echo')
+            cat > "$P4A_LIBFFI" << 'EOF'
+          from pythonforandroid.recipe import Recipe
+          from pythonforandroid.util import current_directory
+          from os.path import join
+          import sh
+          
+          class LibffiRecipe(Recipe):
+              version = '3.4.4'
+              url = 'https://github.com/libffi/libffi/releases/download/v{version}/libffi-{version}.tar.gz'
+              patches = []
+              built_libraries = {'libffi.so': '.libs'}
+          
+              def build_arch(self, arch):
+                  super().build_arch(arch)
+                  env = self.get_recipe_env(arch)
+                  with current_directory(self.get_build_dir(arch.arch)):
+                      configure = sh.Command('./configure')
+                      from pythonforandroid.logger import shprint
+                      shprint(configure, '--host=' + arch.toolchain_prefix, '--prefix=' + self.get_build_dir(arch.arch), '--disable-builddir', '--enable-shared', _env=env)
+                      shprint(sh.make, '-j4', _env=env)
+                      shprint(sh.make, 'install', _env=env)
+          
+          recipe = LibffiRecipe()
+          EOF
             
-            shprint(configure,
-                    '--host=' + arch.toolchain_prefix,
-                    '--prefix=' + self.get_build_dir(arch.arch),
-                    '--disable-builddir',
-                    '--enable-shared',
-                    _env=env)
-            
-            shprint(sh.make, '-j4', _env=env)
-            shprint(sh.make, 'install', _env=env)
-
-recipe = LibffiRecipe()
-LIBFFI_PATCH
-            
-            echo "✅ Patched libffi recipe to skip autoreconf"
+            echo "Patched libffi recipe to skip autoreconf"
           else
-            echo "⚠️  libffi recipe not found yet, will use default"
+            echo "libffi recipe not found yet, will use default"
           fi
 
       # 1️⃣1️⃣ Build APK
