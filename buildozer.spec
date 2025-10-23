@@ -18,7 +18,6 @@ fullscreen = 0
 # Android specific settings
 android.archs = arm64-v8a
 android.release_artifact = apk
-android.accept_sdk_license = True
 android.api = 33
 android.ndk = 25.2.9519653
 android.sdk.build_tools = 33.0.2
@@ -33,8 +32,8 @@ version = 0.2
 debug = 1
 
 # SDK and NDK paths
-android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
-android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.9519653
+android.ndk_path = ~/.buildozer/android/platform/android-ndk
+android.accept_sdk_license = True
 
 [buildozer]
 log_level = 2
@@ -42,3 +41,4 @@ warn_on_root = 1
 android.allow_backup = True
 android.logcat = True
 android.deploy = false
+
