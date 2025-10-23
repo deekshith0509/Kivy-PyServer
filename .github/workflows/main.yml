@@ -20,10 +20,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.10.14
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.10.14'
 
       - name: Create Python virtualenv & upgrade pip
         run: |
@@ -31,33 +31,31 @@ jobs:
           source .venv/bin/activate
           pip install --upgrade pip setuptools cython
 
-      - name: Install Buildozer dependencies (apt)
+      - name: Install Buildozer system dependencies
         run: |
           sudo apt update
           sudo apt install -y \
-            python3-pip python3-setuptools python3-wheel libffi-dev pkg-config \
+            python3-pip python3-setuptools python3-wheel \
             git zip unzip openjdk-17-jdk \
-            virtualenv \
-            build-essential libsqlite3-dev sqlite3 bzip2 libbz2-dev \
-            zlib1g-dev libssl-dev libncurses-dev libncursesw5-dev \
-            libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev \
-            libbz2-dev libexpat1-dev liblzma-dev libffi-dev \
-            libtool pkg-config libgl1 libgles2 autoconf automake \
-            cmake
-          # Note: libtinfo5 is removed in Ubuntu 24.04 -> use libncurses-dev
+            virtualenv build-essential libsqlite3-dev \
+            sqlite3 bzip2 libbz2-dev zlib1g-dev libssl-dev \
+            libncurses-dev libncursesw5-dev libreadline-dev \
+            libsqlite3-dev libgdbm-dev libdb5.3-dev libexpat1-dev \
+            liblzma-dev libffi-dev libtool pkg-config \
+            libgl1 libgles2 autoconf automake cmake
 
-      - name: Install Buildozer
+      - name: Install Buildozer & python-for-android
         run: |
           source .venv/bin/activate
-          pip install --upgrade buildozer
+          pip install --upgrade buildozer==1.5.0 python-for-android==2024.7.1
 
-      - name: Accept SDK licenses and prepare environment
+      - name: Accept SDK licenses & prepare Android environment
         run: |
           source .venv/bin/activate
           mkdir -p ~/.android
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
 
-          # Preinstall NDK manually to avoid download bug
+          # Preinstall Android NDK r25b
           mkdir -p ~/.buildozer/android/platform
           cd ~/.buildozer/android/platform
           echo "Downloading Android NDK 25b..."
@@ -66,7 +64,7 @@ jobs:
           mv android-ndk-r25b android-ndk
           rm ndk.zip
 
-          # Proceed with SDK install/update (use retries)
+          # Update Android SDK with retries
           cd -
           for i in 1 2 3; do
             yes | buildozer android update --sdk_dir=$HOME/.buildozer/android/platform/android-sdk && break || sleep 30
