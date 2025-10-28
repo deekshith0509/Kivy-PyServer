@@ -490,7 +490,15 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 else:
                     icon = self._get_file_icon(name)
                     size_str = self._format_size(size)
-                
+    
+                # ✅ safer: construct the button separately
+                if not os.path.isdir(fullname):
+                    download_url = f"/download?file={urllib.parse.quote(fullname)}"
+                    download_button = f'<button class="btn-download" onclick="location.href=\'{download_url}\'">Download</button>'
+                else:
+                    download_button = ""
+    
+                # ✅ build the HTML safely
                 html += f"""
                 <div class="file-item">
                     <span class="material-icons file-icon">{icon}</span>
@@ -499,7 +507,7 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
                         <div class="file-meta">{size_str} • {mtime}</div>
                     </div>
                     <div class="file-actions">
-                        {'<button class="btn-download" onclick="location.href=\'/download?file=' + urllib.parse.quote(fullname) + '\'">Download</button>' if not os.path.isdir(fullname) else ''}
+                        {download_button}
                     </div>
                 </div>
                 """
@@ -507,6 +515,7 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 continue
         
         return html
+
     
     def _get_file_icon(self, filename):
         """Get appropriate Material icon for file type"""
