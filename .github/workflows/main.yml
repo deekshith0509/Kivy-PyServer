@@ -127,7 +127,7 @@ jobs:
                   env = self.get_recipe_env(arch)
                   with current_directory(self.get_build_dir(arch.arch)):
                       configure = sh.Command('./configure')
-                      shprint(configure, '--host=' + arch.toolchain_prefix, '--prefix=' + self.get_build_dir(arch.arch), '--disable-builddir', '--enable-shared', _env=env)
+                      shprint(configure, '--host=' + arch.command_prefix, '--prefix=' + self.get_build_dir(arch.arch), '--disable-builddir', '--enable-shared', _env=env)
                       shprint(sh.make, '-j4', _env=env)
                       shprint(sh.make, 'install', _env=env)
               
@@ -140,7 +140,7 @@ jobs:
           recipe = LibffiRecipe()
           EOF
             
-            echo "Patched libffi recipe to skip autoreconf"
+            echo "Patched libffi recipe successfully"
           else
             echo "libffi recipe not found yet, will use default"
           fi
