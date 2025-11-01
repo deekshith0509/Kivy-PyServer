@@ -3,91 +3,30 @@ name: Build Kivy APK
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-      # 1️⃣ Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      # 2️⃣ Set up Temurin Java 17
-      - name: Set up Java 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y python3-pip autoconf automake libtool wget
 
-      # 3️⃣ Set up Python 3.9 (better compatibility with Kivy build chain)
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+    - name: Install Buildozer
+      run: pip3 install buildozer
 
-      # 4️⃣ Install system dependencies with libtool-bin
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            git zip unzip openjdk-17-jdk build-essential \
-            libssl-dev libffi-dev python3-dev \
-            zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
-            libsqlite3-dev libreadline-dev libbz2-dev \
-            ccache autoconf libtool libtool-bin automake pkg-config
+    - name: Pre-download libffi
+      run: |
+        mkdir -p .buildozer/android/platform/build-arm64-v8a/packages/libffi
+        cd .buildozer/android/platform/build-arm64-v8a/packages/libffi
+        wget -O libffi-3.4.4.tar.gz https://github.com/libffi/libffi/releases/download/v3.4.4/libffi-3.4.4.tar.gz
+        tar -xzf libffi-3.4.4.tar.gz
+        mv libffi-3.4.4 libffi
 
-      # 5️⃣ Create virtual environment
-      - name: Create Python virtualenv
-        run: |
-          pip install --upgrade pip setuptools wheel
-          pip install Cython==0.29.36
-
-      # 6️⃣ Install Buildozer
-      - name: Install Buildozer
-        run: |
-          source .venv/bin/activate
-          pip install buildozer==1.5.0
-
-      # 7️⃣ Cache Buildozer directory
-      - name: Cache Buildozer directory
-        uses: actions/cache@v3
-        with:
-          path: |
-            .buildozer/android/platform/android-sdk
-            .buildozer/android/platform/android-ndk
-            .buildozer/android/platform/apache-ant
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v3
-
-      # 9️⃣ Initialize Android SDK and accept licenses
-      - name: Initialize SDK
-        run: |
-          source .venv/bin/activate
-          mkdir -p ~/.android
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
-
-      # 🔟 Build APK
-      - name: Build APK
-        run: |
-          export USE_CCACHE=1
-          buildozer -v android debug
-
-      # 1️⃣1️⃣ Upload APK
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: bin/*.apk
-        if: success()
-
-      # 1️⃣2️⃣ Upload logs on failure
-      - name: Upload logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            .buildozer/android/platform/build-*/build.log
-            .buildozer/logs/
-        if: failure()
+    - name: Build APK
+      run: buildozer android debug
