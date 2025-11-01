@@ -42,8 +42,6 @@ jobs:
       # 5️⃣ Create virtual environment
       - name: Create Python virtualenv
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
           pip install --upgrade pip setuptools wheel
           pip install Cython==0.29.36
 
@@ -63,31 +61,16 @@ jobs:
             .buildozer/android/platform/apache-ant
           key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v3
 
-      # 8️⃣ Update buildozer.spec to use develop branch of p4a and fix requirements
-      - name: Update buildozer.spec
-        run: |
-          # Remove the explicit python3 version and pyjnius
-          sed -i 's/^requirements = .*/requirements = python3,kivy,qrcode,plyer,kivymd==1.1.1,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,setuptools/g' buildozer.spec
-          
-          # Add p4a branch to buildozer.spec if not present
-          if ! grep -q "p4a.branch" buildozer.spec; then
-            echo -e "\n[buildozer]\np4a.branch = develop" >> buildozer.spec
-          else
-            sed -i 's/^p4a.branch = .*/p4a.branch = develop/g' buildozer.spec
-          fi
-
       # 9️⃣ Initialize Android SDK and accept licenses
       - name: Initialize SDK
         run: |
           source .venv/bin/activate
           mkdir -p ~/.android
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
-          buildozer android update
 
       # 🔟 Build APK
       - name: Build APK
         run: |
-          source .venv/bin/activate
           export USE_CCACHE=1
           buildozer -v android debug
 
