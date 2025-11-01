@@ -285,11 +285,3 @@ manifest =
 
 # (str) Full path to android manifest.xml file to use (override android.manifest)
 # manifest_path = 
-
-[buildozer]
-
-# (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
-log_level = 1
-
-# (bool) run in a specific directory
-# workdir = .
