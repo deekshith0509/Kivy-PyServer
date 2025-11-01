@@ -63,96 +63,35 @@ jobs:
             .buildozer/android/platform/apache-ant
           key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v3
 
-      # 8️⃣ Fix buildozer.spec
+      # 8️⃣ Update buildozer.spec to use develop branch of p4a and fix requirements
       - name: Update buildozer.spec
         run: |
-          # Ensure proper configuration
-          sed -i 's/^android.ndk =.*/android.ndk = 25b/g' buildozer.spec
-          sed -i 's/^android.api =.*/android.api = 33/g' buildozer.spec
-          sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/g' buildozer.spec
+          # Remove the explicit python3 version and pyjnius
+          sed -i 's/^requirements = .*/requirements = python3,kivy,qrcode,plyer,kivymd==1.1.1,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,setuptools/g' buildozer.spec
           
-          # Simplify Python requirements to avoid issues
-          sed -i 's/^requirements = .*/requirements = python3,kivy==2.2.1,pillow,plyer,kivymd==1.1.1,qrcode,requests/g' buildozer.spec
-          
-          # Remove problematic requirements
-          sed -i 's/,pyjnius//g' buildozer.spec
-          sed -i 's/,setuptools//g' buildozer.spec
-          sed -i 's/python3==3.10.0/python3/g' buildozer.spec
+          # Add p4a branch to buildozer.spec if not present
+          if ! grep -q "p4a.branch" buildozer.spec; then
+            echo -e "\n[buildozer]\np4a.branch = develop" >> buildozer.spec
+          else
+            sed -i 's/^p4a.branch = .*/p4a.branch = develop/g' buildozer.spec
+          fi
 
-      # 9️⃣ Initialize Android SDK
+      # 9️⃣ Initialize Android SDK and accept licenses
       - name: Initialize SDK
         run: |
           source .venv/bin/activate
           mkdir -p ~/.android
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
+          buildozer android update
 
-      # 🔟 Pre-download and patch libffi
-      - name: Patch libffi build
-        run: |
-          source .venv/bin/activate
-          
-          # Initialize buildozer (downloads p4a)
-          timeout 300 buildozer android update || true
-          
-          # Wait for p4a to exist
-          for i in {1..30}; do
-            if [ -d ".buildozer/android/platform/python-for-android" ]; then
-              break
-            fi
-            echo "Waiting for p4a... ($i/30)"
-            sleep 2
-          done
-          
-          P4A_LIBFFI=".buildozer/android/platform/python-for-android/pythonforandroid/recipes/libffi/__init__.py"
-          
-          if [ -f "$P4A_LIBFFI" ]; then
-            echo "Found libffi recipe, patching..."
-            cp "$P4A_LIBFFI" "$P4A_LIBFFI.bak"
-            
-            cat > "$P4A_LIBFFI" << 'EOF'
-          from pythonforandroid.recipe import Recipe
-          from pythonforandroid.util import current_directory
-          from pythonforandroid.logger import shprint
-          from os.path import join, exists
-          import sh
-          
-          class LibffiRecipe(Recipe):
-              version = '3.4.4'
-              url = 'https://github.com/libffi/libffi/releases/download/v{version}/libffi-{version}.tar.gz'
-              patches = []
-              built_libraries = {'libffi.so': '.libs'}
-          
-              def build_arch(self, arch):
-                  super().build_arch(arch)
-                  env = self.get_recipe_env(arch)
-                  with current_directory(self.get_build_dir(arch.arch)):
-                      configure = sh.Command('./configure')
-                      shprint(configure, '--host=' + arch.command_prefix, '--prefix=' + self.get_build_dir(arch.arch), '--disable-builddir', '--enable-shared', _env=env)
-                      shprint(sh.make, '-j4', _env=env)
-                      shprint(sh.make, 'install', _env=env)
-              
-              def get_include_dirs(self, arch):
-                  return [join(self.get_build_dir(arch.arch), 'include')]
-              
-              def get_lib_dirs(self, arch):
-                  return [join(self.get_build_dir(arch.arch), '.libs')]
-          
-          recipe = LibffiRecipe()
-          EOF
-            
-            echo "Patched libffi recipe successfully"
-          else
-            echo "libffi recipe not found yet, will use default"
-          fi
-
-      # 1️⃣1️⃣ Build APK
+      # 🔟 Build APK
       - name: Build APK
         run: |
           source .venv/bin/activate
           export USE_CCACHE=1
           buildozer -v android debug
 
-      # 1️⃣2️⃣ Upload APK
+      # 1️⃣1️⃣ Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -160,7 +99,7 @@ jobs:
           path: bin/*.apk
         if: success()
 
-      # 1️⃣3️⃣ Upload logs on failure
+      # 1️⃣2️⃣ Upload logs on failure
       - name: Upload logs
         uses: actions/upload-artifact@v4
         with:
