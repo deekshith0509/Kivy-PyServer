@@ -81,7 +81,6 @@ jobs:
           export USE_CCACHE=1
           export ANDROIDNDK=$ANDROID_NDK_ROOT
           export ANDROIDSDK=$ANDROID_SDK_ROOT
-          yes | sdkmanager --licenses
           yes | buildozer -v android debug --log-level=2
         env:
           ANDROIDNDK: ${{ env.ANDROID_NDK_ROOT }}
