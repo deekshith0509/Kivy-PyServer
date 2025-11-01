@@ -54,16 +54,6 @@ jobs:
           source .venv/bin/activate
           pip install buildozer==1.5.0
 
-      # 7. Cache Buildozer directory (updated key for fixes)
-      - name: Cache Buildozer directory
-        uses: actions/cache@v4
-        with:
-          path: |
-            .buildozer/android/platform/android-sdk
-            .buildozer/android/platform/android-ndk
-            .buildozer/android/platform/apache-ant
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v5-libffi-fix
-
       # 8. Set up Android SDK and paths
       - name: Set up Android SDK
         run: |
