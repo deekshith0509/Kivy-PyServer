@@ -154,7 +154,7 @@ log_level = 2
 #android.maven_repo = https://repo1.maven.org/maven2
 
 # (bool) ADD SDK Manager available packages and update them
-#android.accept_sdk_license = True
+android.accept_sdk_license = True
 
 # (int) Rebuild the compiler toolchain if version changed
 #android.p4a_branch = master
@@ -285,3 +285,4 @@ manifest =
 
 # (str) Full path to android manifest.xml file to use (override android.manifest)
 # manifest_path = 
+
