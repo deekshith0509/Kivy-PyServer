@@ -14,11 +14,14 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt update
-        sudo apt install -y python3-pip autoconf automake libtool wget
-
+          sudo apt update
+          sudo apt install -y \
+            git zip unzip openjdk-17-jdk build-essential \
+            libssl-dev libffi-dev python3-dev \
+            zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
+            libsqlite3-dev libreadline-dev libbz2-dev  \
     - name: Install Buildozer
-      run: pip3 install buildozer
+      run: pip3 install buildozer Cython==0.29.36 pip setuptools wheel
 
     - name: Pre-download libffi
       run: |
@@ -30,3 +33,9 @@ jobs:
 
     - name: Build APK
       run: buildozer android debug
+
+    - name: Upload APK to artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: my-app-apk
+        path: bin/*.apk
