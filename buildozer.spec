@@ -1,13 +1,13 @@
 [app]
 
 # (str) Title of your application
-title = My Application
+title = pyServer
 
 # (str) Package name
-package.name = myapp
+package.name = server
 
 # (str) Package domain (needed for android/ios packaging)
-package.domain = org.test
+package.domain = com.share
 
 # (str) Source code where the main.py live
 source.dir = .
@@ -33,7 +33,7 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy
+requirements = python3==3.10,kivy,qrcode,plyer,kivymd==1.1.1,materialyoucolor,exceptiongroup,asyncgui,asynckivy,Pillow,urllib3,requests,pyjnius,setuptools
 
 # (str) Custom Source folders to find application addons
 # Sets custom source folders, bases on working dir.
@@ -285,4 +285,5 @@ manifest =
 
 # (str) Full path to android manifest.xml file to use (override android.manifest)
 # manifest_path = 
+
 
