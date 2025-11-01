@@ -54,7 +54,7 @@ orientation = portrait
 
 # (list) OS specific permissions
 # Android permissions can be found here: https://developer.android.com/reference/android/Manifest.permission
-#android.permissions = INTERNET
+android.permissions = MANAGE_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, INTERNET, READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, READ_MEDIA_AUDIO
 
 # (list) features (adds uses-feature -tags to manifest)
 #android.features = 
@@ -285,5 +285,6 @@ manifest =
 
 # (str) Full path to android manifest.xml file to use (override android.manifest)
 # manifest_path = 
+
 
 
