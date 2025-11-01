@@ -3,39 +3,140 @@ name: Build Kivy APK
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      # 1. Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
+      # 2. Set up Temurin Java 17
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 3. Set up Python 3.9 (compatible with Kivy build chain)
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # 4. Install system dependencies (enhanced for autotools and libffi)
+      - name: Install system dependencies
+        run: |
           sudo apt update
           sudo apt install -y \
             git zip unzip openjdk-17-jdk build-essential \
             libssl-dev libffi-dev python3-dev \
             zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
-            libsqlite3-dev libreadline-dev libbz2-dev  \
-    - name: Install Buildozer
-      run: pip3 install buildozer Cython==0.29.36 pip setuptools wheel
+            libsqlite3-dev libreadline-dev libbz2-dev \
+            ccache autoconf automake libtool libtool-bin pkg-config \
+            wget libtinfo5 m4  # Added m4 for autoreconf/libffi
 
-    - name: Pre-download libffi
-      run: |
-        mkdir -p .buildozer/android/platform/build-arm64-v8a/packages/libffi
-        cd .buildozer/android/platform/build-arm64-v8a/packages/libffi
-        wget -O libffi-3.4.4.tar.gz https://github.com/libffi/libffi/releases/download/v3.4.4/libffi-3.4.4.tar.gz
-        tar -xzf libffi-3.4.4.tar.gz
-        mv libffi-3.4.4 libffi
+      # 5. Create Python virtual environment
+      - name: Create Python virtualenv
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip setuptools wheel
+          pip install Cython==0.29.36
 
-    - name: Build APK
-      run: buildozer android debug
+      # 6. Install Buildozer
+      - name: Install Buildozer
+        run: |
+          source .venv/bin/activate
+          pip install buildozer==1.5.0
 
-    - name: Upload APK to artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: my-app-apk
-        path: bin/*.apk
+      # 7. Cache Buildozer directory (updated key for fixes)
+      - name: Cache Buildozer directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            .buildozer/android/platform/android-sdk
+            .buildozer/android/platform/android-ndk
+            .buildozer/android/platform/apache-ant
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v5-libffi-fix
+
+      # 8. Set up Android SDK and paths
+      - name: Set up Android SDK
+        run: |
+          mkdir -p ~/.android
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
+          mkdir -p .buildozer/android/platform/android-sdk/cmdline-tools/latest
+          # Download commandlinetools if not present
+          if [ ! -f "cmdline-tools.zip" ]; then
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+            unzip -q cmdline-tools.zip
+            mv cmdline-tools/* .buildozer/android/platform/android-sdk/cmdline-tools/latest/
+            rm -rf cmdline-tools cmdline-tools.zip
+          fi
+          echo "ANDROID_SDK_ROOT=$GITHUB_WORKSPACE/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
+
+      # 9. Install Android SDK components, NDK 25b, and accept licenses
+      - name: Install SDK components
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
+            "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;25.1.8937393"
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT --licenses
+          # Export NDK path for Buildozer
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/25.1.8937393" >> $GITHUB_ENV
+
+      # 10. Initialize Buildozer (to download sources early)
+      - name: Initialize Buildozer
+        run: |
+          source .venv/bin/activate
+          buildozer android init  # Ensures spec is present; customize locally if needed
+          export USE_CCACHE=1
+
+      # 11. Patch libffi recipe for configure generation
+      - name: Patch libffi recipe
+        run: |
+          source .venv/bin/activate
+          # Run initial build to trigger recipe downloads, then patch
+          buildozer -v android debug || true  # Partial run to setup directories
+          # Navigate to libffi build dir and generate configure if missing
+          LIBFFI_DIR=".buildozer/android/platform/build-arm64-v8a/build/other_builds/libffi/arm64-v8a__ndk_target_21/libffi"
+          if [ -d "$LIBFFI_DIR" ] && [ ! -f "$LIBFFI_DIR/configure" ]; then
+            cd "$LIBFFI_DIR"
+            autoreconf -vif || echo "Autoreconf completed or skipped"
+            # Ensure configure is executable
+            chmod +x configure
+          fi
+          # Set env for NDK
+          export ANDROIDNDK=$ANDROID_NDK_ROOT
+          export ANDROIDSDK=$ANDROID_SDK_ROOT
+
+      # 12. Build APK with debug logging
+      - name: Build APK
+        run: |
+          source .venv/bin/activate
+          export USE_CCACHE=1
+          export ANDROIDNDK=$ANDROID_NDK_ROOT
+          export ANDROIDSDK=$ANDROID_SDK_ROOT
+          buildozer -v android debug --log-level=2
+
+      # 13. Upload APK on success
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: bin/*.apk
+        if: success()
+
+      # 14. Upload logs on failure
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            .buildozer/android/platform/build-*/build.log
+            .buildozer/logs/
+            .buildozer/android/platform/python-for-android/dist/*.log
+        if: failure()
