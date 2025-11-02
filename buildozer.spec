@@ -32,7 +32,7 @@ requirements = python3==3.10.0,hostpython3==3.10.0,kivy,kivymd==1.1.1,pillow,qrc
 orientation = portrait
 
 # (list) OS specific permissions
-android.permissions = MANAGE_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO,READ_MEDIA_AUDIO
+android.permissions = MANAGE_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO,READ_MEDIA_AUDIO,POST_NOTIFICATIONS,FOREGROUND_SERVICE,WAKE_LOCK
 
 # CRITICAL FIX: Update to API 34 (was 31, needs 33+)
 # (int) Target Android API, should be as high as possible.

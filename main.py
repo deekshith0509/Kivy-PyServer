@@ -57,20 +57,175 @@ from kivymd.uix.textfield import MDTextField
 
 # Android-specific imports
 if kivy_platform == 'android':
-    from android.permissions import request_permissions, check_permission
+    from android.permissions import request_permissions, check_permission, Permission
     from android.storage import primary_external_storage_path
-    from jnius import autoclass, cast
+    from jnius import autoclass, cast, PythonJavaClass, java_method
 
     Build = autoclass('android.os.Build')
     Environment = autoclass('android.os.Environment')
     Intent = autoclass('android.content.Intent')
+    PendingIntent = autoclass('android.app.PendingIntent')
     Settings = autoclass('android.provider.Settings')
     Uri = autoclass('android.net.Uri')
     PythonActivity = autoclass('org.kivy.android.PythonActivity')
     Context = autoclass('android.content.Context')
-    WifiManager = autoclass('android.net.wifi.WifiManager')
-    ConnectivityManager = autoclass('android.net.ConnectivityManager')
-    NetworkCapabilities = autoclass('android.net.NetworkCapabilities')
+    
+    # Service components
+    Service = autoclass('android.app.Service')
+    NotificationChannel = autoclass('android.app.NotificationChannel')
+    NotificationManager = autoclass('android.app.NotificationManager')
+    Notification = autoclass('android.app.Notification')
+    NotificationCompat = autoclass('androidx.core.app.NotificationCompat')
+    Color = autoclass('android.graphics.Color')
+
+
+# ============================================================================
+# ANDROID FOREGROUND SERVICE
+# ============================================================================
+
+class AndroidForegroundService:
+    """Manages Android foreground service to keep server running in background"""
+    
+    def __init__(self):
+        self.service_started = False
+        self.notification_id = 1
+        self.channel_id = "pyserver_channel"
+        
+    def create_notification_channel(self):
+        """Create notification channel (required for Android 8.0+)"""
+        if kivy_platform != 'android':
+            return
+        
+        try:
+            activity = PythonActivity.mActivity
+            notification_manager = activity.getSystemService(Context.NOTIFICATION_SERVICE)
+            
+            if Build.VERSION.SDK_INT >= 26:  # Android 8.0+
+                channel = NotificationChannel(
+                    self.channel_id,
+                    "PyServer Service",
+                    NotificationManager.IMPORTANCE_LOW
+                )
+                channel.setDescription("Keeps PyServer running in background")
+                channel.enableLights(True)
+                channel.setLightColor(Color.BLUE)
+                channel.setShowBadge(True)
+                
+                notification_manager.createNotificationChannel(channel)
+                logger.log("Notification channel created", "INFO")
+        except Exception as e:
+            logger.log(f"Error creating notification channel: {e}", "ERROR")
+    
+    def start_foreground_service(self, ip: str, port: int):
+        """Start foreground service with notification"""
+        if kivy_platform != 'android':
+            return False
+        
+        try:
+            activity = PythonActivity.mActivity
+            
+            # Create notification channel first
+            self.create_notification_channel()
+            
+            # Create intent for opening app when notification is tapped
+            intent = Intent(activity, PythonActivity)
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            
+            pending_intent = PendingIntent.getActivity(
+                activity,
+                0,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            
+            # Build notification
+            notification_builder = NotificationCompat.Builder(activity, self.channel_id)
+            notification_builder.setContentTitle("PyServer Running")
+            notification_builder.setContentText(f"Server: http://{ip}:{port}")
+            notification_builder.setSmallIcon(activity.getApplicationInfo().icon)
+            notification_builder.setPriority(NotificationCompat.PRIORITY_LOW)
+            notification_builder.setContentIntent(pending_intent)
+            notification_builder.setOngoing(True)  # Cannot be dismissed
+            notification_builder.setAutoCancel(False)
+            
+            # Add action button to stop server
+            stop_intent = Intent(activity, PythonActivity)
+            stop_intent.setAction("STOP_SERVER")
+            stop_pending_intent = PendingIntent.getActivity(
+                activity,
+                1,
+                stop_intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            notification_builder.addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Stop Server",
+                stop_pending_intent
+            )
+            
+            notification = notification_builder.build()
+            
+            # Start foreground service
+            notification_manager = activity.getSystemService(Context.NOTIFICATION_SERVICE)
+            notification_manager.notify(self.notification_id, notification)
+            
+            self.service_started = True
+            logger.log("Foreground service started", "INFO")
+            return True
+            
+        except Exception as e:
+            logger.log(f"Error starting foreground service: {e}", "ERROR")
+            return False
+    
+    def update_notification(self, ip: str, port: int, status: str = "Running"):
+        """Update notification with new info"""
+        if kivy_platform != 'android' or not self.service_started:
+            return
+        
+        try:
+            activity = PythonActivity.mActivity
+            
+            intent = Intent(activity, PythonActivity)
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            
+            pending_intent = PendingIntent.getActivity(
+                activity,
+                0,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            
+            notification_builder = NotificationCompat.Builder(activity, self.channel_id)
+            notification_builder.setContentTitle(f"PyServer {status}")
+            notification_builder.setContentText(f"Server: http://{ip}:{port}")
+            notification_builder.setSmallIcon(activity.getApplicationInfo().icon)
+            notification_builder.setPriority(NotificationCompat.PRIORITY_LOW)
+            notification_builder.setContentIntent(pending_intent)
+            notification_builder.setOngoing(True)
+            notification_builder.setAutoCancel(False)
+            
+            notification = notification_builder.build()
+            
+            notification_manager = activity.getSystemService(Context.NOTIFICATION_SERVICE)
+            notification_manager.notify(self.notification_id, notification)
+            
+        except Exception as e:
+            logger.log(f"Error updating notification: {e}", "ERROR")
+    
+    def stop_foreground_service(self):
+        """Stop foreground service and remove notification"""
+        if kivy_platform != 'android' or not self.service_started:
+            return
+        
+        try:
+            activity = PythonActivity.mActivity
+            notification_manager = activity.getSystemService(Context.NOTIFICATION_SERVICE)
+            notification_manager.cancel(self.notification_id)
+            
+            self.service_started = False
+            logger.log("Foreground service stopped", "INFO")
+        except Exception as e:
+            logger.log(f"Error stopping foreground service: {e}", "ERROR")
 
 
 # ============================================================================
@@ -696,7 +851,7 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 # SERVER MANAGER
 # ============================================================================
 class ServerManager:
-    """Manages the HTTP server lifecycle with proper cleanup"""
+    """Manages the HTTP server lifecycle with foreground service"""
     
     def __init__(self):
         self.server = None
@@ -704,11 +859,12 @@ class ServerManager:
         self.is_running = False
         self.port = DEFAULT_PORT
         self.directory = None
-        self._shutdown_lock = threading.Lock()  # ADD THIS
+        self._shutdown_lock = threading.Lock()
+        self.foreground_service = AndroidForegroundService()
     
     def start(self, directory: str, port: int = DEFAULT_PORT) -> bool:
-        """Start the HTTP server"""
-        with self._shutdown_lock:  # ADD THIS
+        """Start the HTTP server with foreground service"""
+        with self._shutdown_lock:
             if self.is_running:
                 logger.log("Server already running", "WARNING")
                 return False
@@ -727,8 +883,8 @@ class ServerManager:
                 
                 # Create server
                 self.server = ThreadedHTTPServer(("", port), EnhancedHTTPHandler)
-                self.server.daemon_threads = True  # ADD THIS
-                self.server.allow_reuse_address = True  # ADD THIS
+                self.server.daemon_threads = True
+                self.server.allow_reuse_address = True
                 
                 # Start server in separate thread
                 self.server_thread = threading.Thread(
@@ -738,6 +894,12 @@ class ServerManager:
                 self.server_thread.start()
                 
                 self.is_running = True
+                
+                # Start foreground service on Android
+                if kivy_platform == 'android':
+                    ip = self.get_local_ip()
+                    self.foreground_service.start_foreground_service(ip, port)
+                
                 logger.log(f"Server started on port {port} serving {directory}", "INFO")
                 return True
                 
@@ -749,13 +911,17 @@ class ServerManager:
                 return False
     
     def stop(self) -> bool:
-        """Stop the HTTP server with proper cleanup"""
-        with self._shutdown_lock:  # ADD THIS
+        """Stop the HTTP server and foreground service"""
+        with self._shutdown_lock:
             if not self.is_running:
                 logger.log("Server not running", "WARNING")
                 return False
             
             try:
+                # Stop foreground service first
+                if kivy_platform == 'android':
+                    self.foreground_service.stop_foreground_service()
+                
                 if self.server:
                     logger.log("Stopping server...", "INFO")
                     
@@ -1538,7 +1704,7 @@ class PyServerApp(MDApp):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.server_manager = ServerManager()
-        self._is_stopping = False  # ADD THIS
+        self._is_stopping = False
         
         # Configure theme
         self.theme_cls.primary_palette = "DeepPurple"
@@ -1564,6 +1730,11 @@ class PyServerApp(MDApp):
     def check_permissions(self):
         """Check and request Android permissions"""
         try:
+            # Request notification permission (Android 13+)
+            if Build.VERSION.SDK_INT >= 33:
+                if not check_permission('android.permission.POST_NOTIFICATIONS'):
+                    request_permissions(['android.permission.POST_NOTIFICATIONS'])
+            
             # Check if we have all files access
             if Build.VERSION.SDK_INT >= 30:  # Android 11+
                 if not Environment.isExternalStorageManager():
@@ -1618,16 +1789,22 @@ class PyServerApp(MDApp):
             logger.log(f"Failed to open settings: {e}", "ERROR")
     
     def on_pause(self):
-        """Handle app pause (Android)"""
-        logger.log("App paused", "INFO")
+        """Handle app pause (Android) - Server keeps running"""
+        logger.log("App paused - Server continues in background", "INFO")
         return True  # Return True to allow pause
     
     def on_resume(self):
         """Handle app resume (Android)"""
         logger.log("App resumed", "INFO")
+        
+        # Update notification if server is running
+        if self.server_manager.is_running:
+            ip = self.server_manager.get_local_ip()
+            port = self.server_manager.port
+            self.server_manager.foreground_service.update_notification(ip, port)
     
     def on_stop(self):
-        """Clean up when app closes - CRITICAL FIX"""
+        """Clean up when app closes"""
         if self._is_stopping:
             return
         
@@ -1637,7 +1814,6 @@ class PyServerApp(MDApp):
         try:
             # Stop server with timeout
             if self.server_manager.is_running:
-                # Use thread to prevent blocking
                 stop_thread = threading.Thread(
                     target=self.server_manager.stop,
                     daemon=True
@@ -1649,7 +1825,6 @@ class PyServerApp(MDApp):
         
         logger.log("Application stopped", "INFO")
         return True
-
 
 # ============================================================================
 # ENTRY POINT
