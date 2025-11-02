@@ -1712,78 +1712,117 @@ class PyServerApp(MDApp):
         super().__init__(**kwargs)
         self.server_manager = ServerManager()
         self._is_stopping = False
-        self._permissions_requested = False
         self._permission_checked = False
 
-        # Configure theme
+        # Theme setup
         self.theme_cls.primary_palette = "Indigo"
         self.theme_cls.accent_palette = "Green"
         self.theme_cls.theme_style = "Light"
         self.theme_cls.material_style = "M3"
 
-        # Configure window
+        # Window setup
         if platform != 'android':
             Window.size = (400, 700)
         Window.clearcolor = get_color_from_hex(COLORS['background'])
 
         logger.log(f"PyServer v{VERSION} initialized", "INFO")
 
+    # ----------------------------------------------------------------------
+    # BUILD & LIFECYCLE
+    # ----------------------------------------------------------------------
     def build(self):
-        """Build the application"""
+        """Build the app and setup screens"""
         sm = ScreenManager()
         sm.add_widget(MainScreen(self.server_manager, name='main'))
         sm.add_widget(LogScreen(name='logs'))
-        
-        # Check permissions immediately
+
+        # Schedule permission check (Android only)
         if platform == 'android':
             Clock.schedule_once(lambda dt: self.check_and_request_permissions(), 0.5)
-        
         return sm
+
+    def on_start(self):
+        """Runs after UI initialized"""
+        if platform == 'android':
+            self.check_and_request_permissions()
+
+    def on_pause(self):
+        """Handle app pause"""
+        logger.log("App paused - Server continues running", "INFO")
+        return True
+
+    def on_resume(self):
+        """Handle app resume"""
+        logger.log("App resumed", "INFO")
+        if self.server_manager.is_running:
+            logger.log("Server still active in background", "INFO")
+
+    def on_stop(self):
+        """Graceful app stop"""
+        if self._is_stopping:
+            return True
+        self._is_stopping = True
+
+        logger.log("Application stopping...", "INFO")
+        try:
+            if self.server_manager.is_running:
+                stop_thread = threading.Thread(target=self.server_manager.stop, daemon=True)
+                stop_thread.start()
+                stop_thread.join(timeout=3)
+        except Exception as e:
+            logger.log(f"Shutdown error: {e}", "ERROR")
+        logger.log("Application stopped", "INFO")
+        return True
+
     # ----------------------------------------------------------------------
     # PERMISSION HANDLING
     # ----------------------------------------------------------------------
-    def request_permissions(self):
-        """Request all necessary permissions"""
-        if self._permissions_requested or not ANDROID_IMPORTS_OK:
+    def check_and_request_permissions(self):
+        """Check and request all necessary permissions"""
+        if self._permission_checked or not ANDROID_IMPORTS_OK:
             return
+        self._permission_checked = True
 
-        self._permissions_requested = True
-        logger.log("Requesting permissions...", "INFO")
+        logger.log("Checking permissions on app start...", "INFO")
 
         try:
-            # Notification permission (Android 13+)
-            if Build.VERSION.SDK_INT >= 33:
-                if not check_permission('android.permission.POST_NOTIFICATIONS'):
-                    request_permissions(['android.permission.POST_NOTIFICATIONS'])
-
             # Android 11+ (API 30 and above)
             if Build.VERSION.SDK_INT >= 30:
                 if not Environment.isExternalStorageManager():
-                    Clock.schedule_once(lambda dt: self.show_storage_permission_dialog(), 0.5)
+                    logger.log("All Files Access permission not granted", "WARNING")
+                    self.show_permission_dialog()
+                    return
                 else:
-                    logger.log("Storage permission granted", "INFO")
+                    logger.log("All Files Access permission granted", "INFO")
+
+            # Android 10 and below
             else:
-                # Android 10 and below
                 perms = [
                     'android.permission.READ_EXTERNAL_STORAGE',
                     'android.permission.WRITE_EXTERNAL_STORAGE'
                 ]
                 needed = [p for p in perms if not check_permission(p)]
                 if needed:
+                    logger.log("Requesting storage permissions", "INFO")
                     request_permissions(needed)
                 else:
-                    logger.log("Storage permissions granted", "INFO")
+                    logger.log("Storage permissions already granted", "INFO")
+
+            # Android 13+ notifications
+            if Build.VERSION.SDK_INT >= 33:
+                if not check_permission('android.permission.POST_NOTIFICATIONS'):
+                    request_permissions(['android.permission.POST_NOTIFICATIONS'])
 
         except Exception as e:
-            logger.log(f"Permission request error: {e}", "ERROR")
+            logger.log(f"Permission check error: {e}", "ERROR")
 
-    def show_storage_permission_dialog(self):
-        """Show dialog explaining why 'All Files Access' is required"""
+    def show_permission_dialog(self):
+        """Explain and redirect user to All Files Access settings"""
         dialog = MDDialog(
-            title="📁 Storage Permission Required",
+            title="📁 All Files Access Required",
             text=(
-                "PyServer needs access to your files to serve them over the network.\n\n"
-                "Please grant 'All Files Access' permission on the next screen."
+                "PyServer requires 'All Files Access' permission to share and serve your files.\n\n"
+                "Please grant this permission on the next screen."
             ),
             buttons=[
                 MDFlatButton(
@@ -1794,210 +1833,11 @@ class PyServerApp(MDApp):
                     text="GRANT PERMISSION",
                     md_bg_color=get_color_from_hex(COLORS['primary']),
                     on_release=lambda x: self.open_all_files_settings(dialog)
-                )
-            ]
-        )
-        dialog.open()
-
-    def open_all_files_settings(self, dialog=None):
-        """Open Android 'All Files Access' settings page"""
-        if dialog:
-            dialog.dismiss()
-
-        try:
-            activity = PythonActivity.mActivity
-            intent = Intent()
-            intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-            uri = Uri.fromParts("package", activity.getPackageName(), None)
-            intent.setData(uri)
-            activity.startActivity(intent)
-            logger.log("Opened All Files Access settings", "INFO")
-
-            # Check permission after returning from settings
-            Clock.schedule_once(self.check_permission_after_return, 2)
-        except Exception as e:
-            logger.log(f"Settings open error: {e}", "ERROR")
-            try:
-                intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                uri = Uri.fromParts("package", activity.getPackageName(), None)
-                intent.setData(uri)
-                activity.startActivity(intent)
-            except:
-                pass
-
-    def check_permission_after_return(self, dt):
-        """Check if 'All Files Access' permission was granted"""
-        try:
-            if Environment.isExternalStorageManager():
-                logger.log("✅ All Files Access permission granted", "INFO")
-            else:
-                logger.log("⚠️ All Files Access not granted", "WARNING")
-                Clock.schedule_once(lambda dt: self.show_storage_permission_dialog(), 0.5)
-        except Exception as e:
-            logger.log(f"Permission check error: {e}", "ERROR")
-
-    # ----------------------------------------------------------------------
-    # LIFECYCLE
-    # ----------------------------------------------------------------------
-    def on_pause(self):
-        """Handle app pause - server continues running"""
-        logger.log("App paused - Server continues in background", "INFO")
-        return True
-
-    def on_resume(self):
-        """Handle app resume"""
-        logger.log("App resumed", "INFO")
-        if self.server_manager.is_running:
-            logger.log("Server still running in background", "INFO")
-
-    def check_and_request_storage_permissions(self):
-        if platform =='linux':
-            return
-            
-        if not Environment.isExternalStorageManager():
-            self.show_storage_permission_dialog()
-        else:
-            print("Already have all files access permission")
-        return True
-
-
-
-    def show_storage_permission_dialog(self):
-        """Show dialog explaining why we need storage permission"""
-        dialog = MDDialog(
-            title="Storage Permission Required",
-            text="This app needs permission to manage files in external storage. Please enable 'Allow all files access' in the next screen.",
-            buttons=[
-                MDFlatButton(
-                    text="CANCEL",
-                    on_release=lambda x: dialog.dismiss()
-                ),
-                MDFlatButton(
-                    text="SETTINGS",
-                    on_release=lambda x: self.open_all_files_settings()
                 ),
             ],
         )
         dialog.open()
 
-    def open_all_files_settings(self):
-        """Open Android settings for all files access"""
-        if platform == 'android':
-            activity = PythonActivity.mActivity
-            
-            # Create intent for "All files access" settings page
-            intent = Intent()
-            intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-            
-            # Set package URI
-            uri = Uri.fromParts("package", "com.share.server", None)
-            intent.setData(uri)
-            
-            # Start the settings activity
-            activity.startActivity(intent)
-            
-            # Schedule a check after returning from settings
-            Clock.schedule_once(self.check_permission_after_return, 1)
-
-
-    def check_permission_after_return(self, dt):
-        """Check if permission was granted after returning from settings"""
-        if platform == 'android':
-            if Environment.isExternalStorageManager():
-                print("All files access permission granted!")
-                # Proceed with your file operations
-                self.initialize_storage()
-            else:
-                print("All files access permission not granted")
-                # Optionally show another dialog or handle denial
-
-    def on_start(self):
-        """Check permissions when app starts"""
-        self.check_and_request_storage_permissions()
-
-    def on_stop(self):
-        """Clean up when app stops"""
-        if self._is_stopping:
-            return True
-
-        self._is_stopping = True
-        logger.log("Application stopping...", "INFO")
-
-        try:
-            # Stop server gracefully
-            if self.server_manager.is_running:
-                def stop_server():
-                    self.server_manager.stop()
-
-                stop_thread = threading.Thread(target=stop_server, daemon=True)
-                stop_thread.start()
-                stop_thread.join(timeout=3)
-        except Exception as e:
-            logger.log(f"Shutdown error: {e}", "ERROR")
-
-        logger.log("Application stopped", "INFO")
-        return True
-    def check_and_request_permissions(self):
-        """Check and request all necessary permissions on app start"""
-        if self._permission_checked or not ANDROID_IMPORTS_OK:
-            return
-
-        self._permission_checked = True
-        logger.log("Checking permissions on app start...", "INFO")
-
-        try:
-            # Check if we have All Files Access permission (Android 11+)
-            if Build.VERSION.SDK_INT >= 30:
-                if not Environment.isExternalStorageManager():
-                    logger.log("All Files Access permission not granted", "WARNING")
-                    self.show_required_permission_dialog()
-                    return
-                else:
-                    logger.log("All Files Access permission granted", "INFO")
-            
-            # For Android 10 and below, check storage permissions
-            elif Build.VERSION.SDK_INT < 30:
-                perms = [
-                    'android.permission.READ_EXTERNAL_STORAGE',
-                    'android.permission.WRITE_EXTERNAL_STORAGE'
-                ]
-                needed = [p for p in perms if not check_permission(p)]
-                if needed:
-                    logger.log("Storage permissions not granted", "WARNING")
-                    request_permissions(needed)
-                else:
-                    logger.log("Storage permissions granted", "INFO")
-            
-            # Request notification permission for Android 13+
-            if Build.VERSION.SDK_INT >= 33:
-                if not check_permission('android.permission.POST_NOTIFICATIONS'):
-                    request_permissions(['android.permission.POST_NOTIFICATIONS'])
-
-        except Exception as e:
-            logger.log(f"Permission check error: {e}", "ERROR")
-
-    def show_required_permission_dialog(self):
-        """Show mandatory permission dialog explaining why All Files Access is required"""
-        dialog = MDDialog(
-            title="🔐 Permission Required for HTTP Server",
-            text=(
-                "PyServer requires 'All Files Access' permission to function properly.\n\n"
-                "This permission is needed to:\n"
-                "• Serve files over your local network\n"
-                "• Access all directories for file sharing\n"
-                "• Stream files to connected devices\n\n"
-                "Without this permission, the HTTP server cannot access files on your device."
-            ),
-            buttons=[
-                MDRaisedButton(
-                    text="GRANT PERMISSION NOW",
-                    md_bg_color=get_color_from_hex(COLORS['primary']),
-                    on_release=lambda x: self.open_all_files_settings(dialog)
-                )
-            ]
-        )
-        dialog.open()
-
     def open_all_files_settings(self, dialog=None):
         """Open Android 'All Files Access' settings page"""
         if dialog:
@@ -2012,46 +1852,48 @@ class PyServerApp(MDApp):
             activity.startActivity(intent)
             logger.log("Opened All Files Access settings", "INFO")
 
-            # Check permission after user returns from settings
+            # Recheck after user returns
             Clock.schedule_once(self.verify_permission_after_settings, 3)
-            
+
         except Exception as e:
-            logger.log(f"Settings open error: {e}", "ERROR")
-            # Fallback to app details settings
+            logger.log(f"Error opening settings: {e}", "ERROR")
+            # Fallback to app details
             try:
                 intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                 uri = Uri.fromParts("package", activity.getPackageName(), None)
                 intent.setData(uri)
                 activity.startActivity(intent)
             except Exception as e2:
-                logger.log(f"Fallback settings error: {e2}", "ERROR")
+                logger.log(f"Fallback failed: {e2}", "ERROR")
 
     def verify_permission_after_settings(self, dt):
-        """Verify if permission was granted after user returns from settings"""
+        """Verify if permission granted after settings"""
         try:
             if Build.VERSION.SDK_INT >= 30:
                 if Environment.isExternalStorageManager():
                     logger.log("✅ All Files Access permission granted!", "INFO")
                     self.show_success_snackbar("Permission granted! Server can now access files.")
                 else:
-                    logger.log("⚠️ All Files Access still not granted", "WARNING")
-                    self.show_required_permission_dialog()
+                    logger.log("⚠️ Permission not granted", "WARNING")
+                    self.show_permission_dialog()
         except Exception as e:
             logger.log(f"Permission verification error: {e}", "ERROR")
 
     def show_success_snackbar(self, message):
-        """Show success message"""
+        """Show a success message"""
         try:
             snackbar = Snackbar(
                 text=message,
                 snackbar_x="10dp",
                 snackbar_y="10dp",
-                size_hint_x=(Window.width - dp(20)) / Window.width
+                size_hint_x=(Window.width - dp(20)) / Window.width,
             )
             snackbar.bg_color = get_color_from_hex(COLORS['success'])
             snackbar.open()
-        except:
+        except Exception:
             pass
+
+
 
 # ============================================================================
 # APPLICATION ENTRY POINT
