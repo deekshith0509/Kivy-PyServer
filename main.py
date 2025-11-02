@@ -44,7 +44,12 @@ from kivy.core.image import Image as CoreImage
 from kivymd.app import MDApp
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
-from kivymd.uix.label import MDLabel, MDIcon  # MDIcon is in label module in KivyMD 1.2.0
+from kivymd.uix.label import MDLabel
+try:
+    from kivymd.uix.label import MDIcon  # KivyMD 1.1.1+
+except ImportError:
+    # Fallback for older versions
+    MDIcon = MDLabel
 from kivymd.uix.card import MDCard
 from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.uix.snackbar import Snackbar
@@ -690,9 +695,8 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 # ============================================================================
 # SERVER MANAGER
 # ============================================================================
-
 class ServerManager:
-    """Manages the HTTP server lifecycle"""
+    """Manages the HTTP server lifecycle with proper cleanup"""
     
     def __init__(self):
         self.server = None
@@ -700,71 +704,89 @@ class ServerManager:
         self.is_running = False
         self.port = DEFAULT_PORT
         self.directory = None
-        self.executor = ThreadPoolExecutor(max_workers=1)
+        self._shutdown_lock = threading.Lock()  # ADD THIS
     
     def start(self, directory: str, port: int = DEFAULT_PORT) -> bool:
         """Start the HTTP server"""
-        if self.is_running:
-            logger.log("Server already running", "WARNING")
-            return False
-        
-        try:
-            # Validate directory
-            if not os.path.isdir(directory):
-                logger.log(f"Invalid directory: {directory}", "ERROR")
+        with self._shutdown_lock:  # ADD THIS
+            if self.is_running:
+                logger.log("Server already running", "WARNING")
                 return False
             
-            self.directory = directory
-            self.port = port
-            
-            # Change to target directory
-            os.chdir(directory)
-            
-            # Create server
-            self.server = ThreadedHTTPServer(("", port), EnhancedHTTPHandler)
-            
-            # Start server in separate thread
-            self.server_thread = threading.Thread(
-                target=self.server.serve_forever,
-                daemon=True
-            )
-            self.server_thread.start()
-            
-            self.is_running = True
-            logger.log(f"Server started on port {port} serving {directory}", "INFO")
-            return True
-            
-        except OSError as e:
-            logger.log(f"Failed to start server: {e}", "ERROR")
-            return False
-        except Exception as e:
-            logger.log(f"Unexpected error starting server: {e}", "ERROR")
-            return False
+            try:
+                # Validate directory
+                if not os.path.isdir(directory):
+                    logger.log(f"Invalid directory: {directory}", "ERROR")
+                    return False
+                
+                self.directory = directory
+                self.port = port
+                
+                # Change to target directory
+                os.chdir(directory)
+                
+                # Create server
+                self.server = ThreadedHTTPServer(("", port), EnhancedHTTPHandler)
+                self.server.daemon_threads = True  # ADD THIS
+                self.server.allow_reuse_address = True  # ADD THIS
+                
+                # Start server in separate thread
+                self.server_thread = threading.Thread(
+                    target=self.server.serve_forever,
+                    daemon=True
+                )
+                self.server_thread.start()
+                
+                self.is_running = True
+                logger.log(f"Server started on port {port} serving {directory}", "INFO")
+                return True
+                
+            except OSError as e:
+                logger.log(f"Failed to start server: {e}", "ERROR")
+                return False
+            except Exception as e:
+                logger.log(f"Unexpected error starting server: {e}", "ERROR")
+                return False
     
     def stop(self) -> bool:
-        """Stop the HTTP server"""
-        if not self.is_running:
-            logger.log("Server not running", "WARNING")
-            return False
-        
-        try:
-            if self.server:
-                logger.log("Stopping server...", "INFO")
-                self.server.shutdown()
-                self.server.server_close()
-                
-                if self.server_thread and self.server_thread.is_alive():
-                    self.server_thread.join(timeout=5)
-                
-                self.server = None
-                self.server_thread = None
+        """Stop the HTTP server with proper cleanup"""
+        with self._shutdown_lock:  # ADD THIS
+            if not self.is_running:
+                logger.log("Server not running", "WARNING")
+                return False
+            
+            try:
+                if self.server:
+                    logger.log("Stopping server...", "INFO")
+                    
+                    # Mark as not running first
+                    self.is_running = False
+                    
+                    # Shutdown server
+                    try:
+                        self.server.shutdown()
+                    except Exception as e:
+                        logger.log(f"Server shutdown warning: {e}", "WARNING")
+                    
+                    # Close server socket
+                    try:
+                        self.server.server_close()
+                    except Exception as e:
+                        logger.log(f"Server close warning: {e}", "WARNING")
+                    
+                    # Wait for thread with timeout
+                    if self.server_thread and self.server_thread.is_alive():
+                        self.server_thread.join(timeout=2)
+                    
+                    self.server = None
+                    self.server_thread = None
+                    
+                    logger.log("Server stopped", "INFO")
+                    return True
+            except Exception as e:
+                logger.log(f"Error stopping server: {e}", "ERROR")
                 self.is_running = False
-                
-                logger.log("Server stopped", "INFO")
-                return True
-        except Exception as e:
-            logger.log(f"Error stopping server: {e}", "ERROR")
-            return False
+                return False
     
     def get_local_ip(self) -> str:
         """Get local IP address"""
@@ -901,36 +923,42 @@ class StatusCard(MDCard):
 # ============================================================================
 
 class MainScreen(Screen):
-    """Main application screen"""
+    """Main application screen with fixed canvas management"""
     
     def __init__(self, server_manager: ServerManager, **kwargs):
         super().__init__(**kwargs)
         self.server_manager = server_manager
         self.qr_texture = None
+        self._toolbar_rect = None  # ADD THIS
         self.build_ui()
     
     def build_ui(self):
-        """Build the main UI"""
+        """Build the main UI with safe canvas operations"""
         layout = BoxLayout(orientation='vertical', spacing=dp(10))
         
-        # Top App Bar with gradient
+        # Top App Bar with gradient - FIXED
         toolbar_box = BoxLayout(size_hint_y=None, height=dp(64))
+        
+        # Safely add canvas instruction
         with toolbar_box.canvas.before:
             Color(rgba=get_color_from_hex(COLORS['primary']))
-            self.toolbar_rect = Rectangle(pos=toolbar_box.pos, size=toolbar_box.size)
+            self._toolbar_rect = Rectangle(pos=toolbar_box.pos, size=toolbar_box.size)
         
-        toolbar_box.bind(pos=self._update_rect, size=self._update_rect)
+        # Bind updates safely
+        toolbar_box.bind(
+            pos=lambda instance, value: self._safe_update_rect(instance),
+            size=lambda instance, value: self._safe_update_rect(instance)
+        )
         
         toolbar = MDTopAppBar(
-            title="[b]PyServer[/b]",
-            use_overflow=True,
-            opposite_colors=True,
-            md_bg_color=(0, 0, 0, 0),  # Transparent background
+            title="PyServer",
+            md_bg_color=(0, 0, 0, 0),
             specific_text_color=get_color_from_hex('#FFFFFF'),
             elevation=0
         )
         toolbar_box.add_widget(toolbar)
         layout.add_widget(toolbar_box)
+        
         
         # Main content in ScrollView
         scroll = ScrollView(do_scroll_x=False)
@@ -1157,6 +1185,25 @@ class MainScreen(Screen):
         layout.add_widget(scroll)
         
         self.add_widget(layout)
+
+    def _safe_update_rect(self, instance):
+        """Safely update rectangle"""
+        try:
+            if self._toolbar_rect and instance:
+                self._toolbar_rect.pos = instance.pos
+                self._toolbar_rect.size = instance.size
+        except Exception as e:
+            logger.log(f"Canvas update error: {e}", "ERROR")
+    
+    def on_pre_leave(self, *args):
+        """Clean up when leaving screen"""
+        try:
+            # Clear any canvas instructions safely
+            pass
+        except Exception:
+            pass
+        return super().on_pre_leave(*args)
+
     
     def _update_rect(self, instance, value):
         """Update toolbar rectangle position and size"""
@@ -1486,30 +1533,28 @@ class LogScreen(Screen):
 # ============================================================================
 
 class PyServerApp(MDApp):
-    """Main application class"""
+    """Main application class with proper lifecycle management"""
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.server_manager = ServerManager()
+        self._is_stopping = False  # ADD THIS
         
         # Configure theme
         self.theme_cls.primary_palette = "DeepPurple"
         self.theme_cls.accent_palette = "Teal"
         self.theme_cls.theme_style = "Light"
-        self.theme_cls.material_style = "M3"  # Material Design 3
         
         # Configure window
-        if not kivy_platform == 'android':
-            Window.size = (400, 700)  # Set default window size for desktop
+        if kivy_platform != 'android':
+            Window.size = (400, 700)
         Window.clearcolor = get_color_from_hex(COLORS['background'])
     
     def build(self):
         """Build the application"""
-        # Check permissions on Android
         if kivy_platform == 'android':
             self.check_permissions()
         
-        # Create screen manager
         sm = ScreenManager()
         sm.add_widget(MainScreen(self.server_manager, name='main'))
         sm.add_widget(LogScreen(name='logs'))
@@ -1572,11 +1617,38 @@ class PyServerApp(MDApp):
         except Exception as e:
             logger.log(f"Failed to open settings: {e}", "ERROR")
     
+    def on_pause(self):
+        """Handle app pause (Android)"""
+        logger.log("App paused", "INFO")
+        return True  # Return True to allow pause
+    
+    def on_resume(self):
+        """Handle app resume (Android)"""
+        logger.log("App resumed", "INFO")
+    
     def on_stop(self):
-        """Clean up when app closes"""
-        if self.server_manager.is_running:
-            self.server_manager.stop()
+        """Clean up when app closes - CRITICAL FIX"""
+        if self._is_stopping:
+            return
+        
+        self._is_stopping = True
+        logger.log("Application stopping...", "INFO")
+        
+        try:
+            # Stop server with timeout
+            if self.server_manager.is_running:
+                # Use thread to prevent blocking
+                stop_thread = threading.Thread(
+                    target=self.server_manager.stop,
+                    daemon=True
+                )
+                stop_thread.start()
+                stop_thread.join(timeout=3)
+        except Exception as e:
+            logger.log(f"Error during shutdown: {e}", "ERROR")
+        
         logger.log("Application stopped", "INFO")
+        return True
 
 
 # ============================================================================

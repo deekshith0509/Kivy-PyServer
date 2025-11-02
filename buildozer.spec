@@ -103,6 +103,9 @@ android.permissions = MANAGE_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_EXTE
 
 # (list) Android Gradle dependencies to add
 #android.gradle_dependencies = 
+android.gradle_dependencies = androidx.appcompat:appcompat:1.6.1
+android.wakelock = False
+android.allow_backup = True
 
 # (bool) Enable AndroidX support. Enable when 'android.gradle_dependencies' contains
 # an 'androidx' package, or any package from Kotlin source.
@@ -236,7 +239,7 @@ android.accept_sdk_license = True
 
 # (bool) Enable AndroidX support. Enable when 'android.gradle_dependencies' contains
 # an 'androidx' package, or any package from Kotlin source.
-#android.enable_androidx = False
+android.enable_androidx = true
 
 [android]
 
@@ -253,7 +256,7 @@ apk_dir = ./bin
 archs = arm64-v8a
 
 # (int) Target Android API, should be as high as possible.
-api = 33
+api = 34
 
 # (int) Minimum API your APK / AAB will support.
 minapi = 21
