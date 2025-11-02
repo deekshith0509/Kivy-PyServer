@@ -836,46 +836,59 @@ class MainScreen(Screen):
         content.add_widget(dir_card)
         
         # QR Code card
+
+        
         qr_card = MDCard(
             orientation='vertical',
             padding=dp(20),
-            spacing=dp(15),
+            spacing=dp(10),
             size_hint_y=None,
-            height=dp(300),
+            height=dp(320),
             elevation=3,
             radius=[dp(16)]
         )
-        
+
+        # --- Container inside card ---
+        qr_container = BoxLayout(
+            orientation='vertical',
+            padding=[0, dp(10), 0, dp(10)],  # top/bottom padding
+            spacing=dp(10)
+        )
+
+        # --- Label (top) ---
         qr_label = MDLabel(
             text="📱 Scan to Connect",
             font_style="H6",
-            theme_text_color="Primary"
+            theme_text_color="Primary",
+            halign="center",
+            size_hint_y=None,
+            height=dp(30)
         )
-        qr_card.add_widget(qr_label)
-        
-        qr_container = BoxLayout(
-            orientation='vertical',
-            padding=dp(10)
-        )
-        
+
+        # --- QR Image (middle) ---
         self.qr_image = Image(
             size_hint=(None, None),
-            size=(dp(200), dp(200)),
+            size=(dp(180), dp(180)),
             pos_hint={'center_x': 0.5}
         )
-        qr_container.add_widget(self.qr_image)
-        
+
+        # --- Hint Label (bottom) ---
         self.qr_hint = MDLabel(
             text="QR code will appear when server starts",
             theme_text_color="Hint",
             halign="center",
-            font_style="Caption"
+            font_style="Caption",
+            size_hint_y=None,
+            height=dp(20)
         )
+
+        # --- Add in correct order ---
+        qr_container.add_widget(qr_label)
+        qr_container.add_widget(self.qr_image)
         qr_container.add_widget(self.qr_hint)
-        
+
         qr_card.add_widget(qr_container)
         content.add_widget(qr_card)
-        
         # Action buttons
         actions_card = MDCard(
             orientation='vertical',
@@ -1010,7 +1023,7 @@ class MainScreen(Screen):
             success, message = self.server_manager.start(directory, DEFAULT_PORT)
             Clock.schedule_once(lambda dt: self.on_server_started(success, message), 0)
         
-        threading.Thread(target=start_thread, daemon=True).start()
+        threading.Thread(target=start_thread, daemon=False).start()
     
     def on_server_started(self, success, message):
         """Handle server start result"""
@@ -1045,7 +1058,7 @@ class MainScreen(Screen):
             success, message = self.server_manager.stop()
             Clock.schedule_once(lambda dt: self.on_server_stopped(success, message), 0)
         
-        threading.Thread(target=stop_thread, daemon=True).start()
+        threading.Thread(target=stop_thread, daemon=False).start()
     
     def on_server_stopped(self, success, message):
         """Handle server stop result"""
@@ -1429,56 +1442,58 @@ class LogScreen(Screen):
 
 class PyServerApp(MDApp):
     """Main PyServer application with full lifecycle management"""
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.server_manager = ServerManager()
         self._is_stopping = False
         self._permissions_requested = False
-        
+
         # Configure theme
         self.theme_cls.primary_palette = "Indigo"
         self.theme_cls.accent_palette = "Green"
         self.theme_cls.theme_style = "Light"
         self.theme_cls.material_style = "M3"
-        
+
         # Configure window
         if kivy_platform != 'android':
             Window.size = (400, 700)
         Window.clearcolor = get_color_from_hex(COLORS['background'])
-        
+
         logger.log(f"PyServer v{VERSION} initialized", "INFO")
-    
+
+    # ----------------------------------------------------------------------
+    # BUILD
+    # ----------------------------------------------------------------------
     def build(self):
         """Build the application"""
-        # Request permissions on Android
         if kivy_platform == 'android':
             Clock.schedule_once(lambda dt: self.request_permissions(), 1)
-        
-        # Create screen manager
+
         sm = ScreenManager()
         sm.add_widget(MainScreen(self.server_manager, name='main'))
         sm.add_widget(LogScreen(name='logs'))
-        
         return sm
-    
+
+    # ----------------------------------------------------------------------
+    # PERMISSION HANDLING
+    # ----------------------------------------------------------------------
     def request_permissions(self):
         """Request all necessary permissions"""
         if self._permissions_requested or not ANDROID_IMPORTS_OK:
             return
-        
+
         self._permissions_requested = True
         logger.log("Requesting permissions...", "INFO")
-        
+
         try:
             # Notification permission (Android 13+)
             if Build.VERSION.SDK_INT >= 33:
                 if not check_permission('android.permission.POST_NOTIFICATIONS'):
                     request_permissions(['android.permission.POST_NOTIFICATIONS'])
-            
-            # Storage permissions
+
+            # Android 11+ (API 30 and above)
             if Build.VERSION.SDK_INT >= 30:
-                # Android 11+ - Need MANAGE_EXTERNAL_STORAGE
                 if not Environment.isExternalStorageManager():
                     Clock.schedule_once(lambda dt: self.show_storage_permission_dialog(), 0.5)
                 else:
@@ -1489,21 +1504,23 @@ class PyServerApp(MDApp):
                     'android.permission.READ_EXTERNAL_STORAGE',
                     'android.permission.WRITE_EXTERNAL_STORAGE'
                 ]
-                
                 needed = [p for p in perms if not check_permission(p)]
                 if needed:
                     request_permissions(needed)
                 else:
                     logger.log("Storage permissions granted", "INFO")
-                    
+
         except Exception as e:
             logger.log(f"Permission request error: {e}", "ERROR")
-    
+
     def show_storage_permission_dialog(self):
-        """Show storage permission dialog"""
+        """Show dialog explaining why 'All Files Access' is required"""
         dialog = MDDialog(
             title="📁 Storage Permission Required",
-            text="PyServer needs access to your files to serve them over the network.\n\nPlease grant 'All Files Access' permission on the next screen.",
+            text=(
+                "PyServer needs access to your files to serve them over the network.\n\n"
+                "Please grant 'All Files Access' permission on the next screen."
+            ),
             buttons=[
                 MDFlatButton(
                     text="LATER",
@@ -1512,17 +1529,17 @@ class PyServerApp(MDApp):
                 MDRaisedButton(
                     text="GRANT PERMISSION",
                     md_bg_color=get_color_from_hex(COLORS['primary']),
-                    on_release=lambda x: self.open_permission_settings(dialog)
+                    on_release=lambda x: self.open_all_files_settings(dialog)
                 )
             ]
         )
         dialog.open()
-    
-    def open_permission_settings(self, dialog=None):
-        """Open Android permission settings"""
+
+    def open_all_files_settings(self, dialog=None):
+        """Open Android 'All Files Access' settings page"""
         if dialog:
             dialog.dismiss()
-        
+
         try:
             activity = PythonActivity.mActivity
             intent = Intent()
@@ -1530,10 +1547,12 @@ class PyServerApp(MDApp):
             uri = Uri.fromParts("package", activity.getPackageName(), None)
             intent.setData(uri)
             activity.startActivity(intent)
-            logger.log("Opened permission settings", "INFO")
+            logger.log("Opened All Files Access settings", "INFO")
+
+            # Check permission after returning from settings
+            Clock.schedule_once(self.check_permission_after_return, 2)
         except Exception as e:
             logger.log(f"Settings open error: {e}", "ERROR")
-            # Fallback
             try:
                 intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                 uri = Uri.fromParts("package", activity.getPackageName(), None)
@@ -1541,42 +1560,69 @@ class PyServerApp(MDApp):
                 activity.startActivity(intent)
             except:
                 pass
-    
+
+    def check_permission_after_return(self, dt):
+        """Check if 'All Files Access' permission was granted"""
+        try:
+            if Environment.isExternalStorageManager():
+                logger.log("✅ All Files Access permission granted", "INFO")
+            else:
+                logger.log("⚠️ All Files Access not granted", "WARNING")
+                Clock.schedule_once(lambda dt: self.show_storage_permission_dialog(), 0.5)
+        except Exception as e:
+            logger.log(f"Permission check error: {e}", "ERROR")
+
+    # ----------------------------------------------------------------------
+    # LIFECYCLE
+    # ----------------------------------------------------------------------
     def on_pause(self):
         """Handle app pause - server continues running"""
         logger.log("App paused - Server continues in background", "INFO")
-        return True
-    
+        return False
+
     def on_resume(self):
         """Handle app resume"""
         logger.log("App resumed", "INFO")
-        
-        # Check if server is still running
         if self.server_manager.is_running:
             logger.log("Server still running in background", "INFO")
-    
+
     def on_stop(self):
         """Clean up when app stops"""
         if self._is_stopping:
             return True
-        
+
         self._is_stopping = True
         logger.log("Application stopping...", "INFO")
-        
+
         try:
             # Stop server gracefully
             if self.server_manager.is_running:
                 def stop_server():
                     self.server_manager.stop()
-                
+
                 stop_thread = threading.Thread(target=stop_server, daemon=True)
                 stop_thread.start()
                 stop_thread.join(timeout=3)
         except Exception as e:
             logger.log(f"Shutdown error: {e}", "ERROR")
-        
+
         logger.log("Application stopped", "INFO")
         return True
+
+
+# ============================================================================
+# APPLICATION ENTRY POINT
+# ============================================================================
+if __name__ == '__main__':
+    try:
+        logger.log("Starting PyServer...", "INFO")
+        PyServerApp().run()
+    except Exception as e:
+        logger.log(f"Fatal error: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
+        raise
+
 
 
 # ============================================================================
