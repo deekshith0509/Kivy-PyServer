@@ -76,13 +76,14 @@ if platform == 'android':
         from jnius import autoclass, cast
 
         Build = autoclass('android.os.Build')
+        VERSION = autoclass('android.os.Build$VERSION')  # ✅ Fixed nested class
         Environment = autoclass('android.os.Environment')
         Intent = autoclass('android.content.Intent')
         Settings = autoclass('android.provider.Settings')
         Uri = autoclass('android.net.Uri')
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
         Context = autoclass('android.content.Context')
-        
+
         ANDROID_IMPORTS_OK = True
     except Exception as e:
         print(f"Android imports failed: {e}")
@@ -1131,7 +1132,7 @@ class MainScreen(Screen):
         # Check Android permissions first
         if platform == 'android' and ANDROID_IMPORTS_OK:
             try:
-                if Build.VERSION.SDK_INT >= 30:
+                if VERSION.SDK_INT >= 30:
                     if not Environment.isExternalStorageManager():
                         self.show_permission_error()
                         return
