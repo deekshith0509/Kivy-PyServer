@@ -56,6 +56,11 @@ from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.uix.snackbar import Snackbar
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.spinner import MDSpinner
+from kivy.utils import platform as kivy_platform
+from kivymd.uix.list import MDList, OneLineListItem
+from kivymd.uix.scrollview import MDScrollView
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.button import MDFlatButton
 
 # Try to import MDIcon
 try:
@@ -217,6 +222,7 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_GET()
     
+
     def handle_download(self):
         """Handle file/folder download requests"""
         try:
@@ -224,16 +230,22 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
             download_path = self.path[10:]  # Remove '/download/' prefix
             download_path = urllib.parse.unquote(download_path)
             
-            # Security check: ensure the path doesn't try to escape the base directory
-            full_path = os.path.abspath(os.path.join(os.getcwd(), download_path.lstrip('/')))
+            # Security check: ensure the path is relative and doesn't try to escape the base directory
+            if download_path.startswith('/') or '..' in download_path:
+                self.send_error(403, "Access denied")
+                return
+            
+            # Construct the full path
+            full_path = os.path.abspath(os.path.join(os.getcwd(), download_path))
             base_dir = os.path.abspath(os.getcwd())
             
+            # Additional security: ensure the resolved path is within base directory
             if not full_path.startswith(base_dir):
                 self.send_error(403, "Access denied")
                 return
             
             if not os.path.exists(full_path):
-                self.send_error(404, "File or folder not found")
+                self.send_error(404, f"File or folder not found: {download_path}")
                 return
             
             if os.path.isfile(full_path):
@@ -248,6 +260,8 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             logger.log(f"Download error: {e}", "ERROR")
             self.send_error(500, f"Download failed: {str(e)}")
+
+
     
     def download_file(self, file_path):
         """Serve a file for download"""
@@ -350,123 +364,161 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PyServer - {displaypath}</title>
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }}
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }}
-        .header {{
-            background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }}
-        .header h1 {{ font-size: 2em; font-weight: 600; }}
-        .breadcrumb {{
-            background: #F9FAFB;
-            padding: 15px 30px;
-            border-bottom: 1px solid #E5E7EB;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-        }}
-        .breadcrumb a {{
-            color: #6366F1;
-            text-decoration: none;
-            margin: 0 5px;
-        }}
-        .breadcrumb a:hover {{ text-decoration: underline; }}
-        .file-list {{ padding: 20px; }}
+<style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+    }}
+    .container {{
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        overflow: hidden;
+    }}
+    .header {{
+        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+    }}
+    .header h1 {{ font-size: 2em; font-weight: 600; }}
+    .breadcrumb {{
+        background: #F9FAFB;
+        padding: 15px 30px;
+        border-bottom: 1px solid #E5E7EB;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        word-break: break-word;
+    }}
+    .breadcrumb a {{
+        color: #6366F1;
+        text-decoration: none;
+        margin: 0 5px;
+    }}
+    .breadcrumb a:hover {{ text-decoration: underline; }}
+    .file-list {{ padding: 20px; }}
+
+    .file-item {{
+        display: flex;
+        align-items: flex-start; /* ✅ align top to match multi-line names */
+        justify-content: space-between;
+        gap: 10px;
+        padding: 15px;
+        border-bottom: 1px solid #E5E7EB;
+        transition: background 0.2s;
+        flex-wrap: nowrap; /* ✅ keeps buttons to right */
+        word-break: break-word;
+    }}
+    .file-item:hover {{ background: #F9FAFB; }}
+    .file-icon {{
+        font-size: 28px;
+        margin-right: 10px;
+        min-width: 28px;
+        margin-top: 2px;
+    }}
+    .file-info {{
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+    }}
+    .file-name {{
+        color: #111827;
+        text-decoration: none;
+        font-weight: 500;
+        display: block;
+        word-wrap: anywhere;
+        white-space: normal; /* ✅ allows wrapping text naturally */
+    }}
+    .file-name:hover {{ color: #6366F1; }}
+    .file-meta {{
+        color: #6B7280;
+        font-size: 0.85em;
+        margin-top: 5px;
+    }}
+    .file-actions {{
+        flex-shrink: 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 8px;
+        min-width: 120px;
+    }}
+    .download-btn {{
+        background: #10B981;
+        color: white;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        text-decoration: none;
+        font-size: 0.85em;
+        white-space: nowrap;
+        transition: background 0.2s;
+    }}
+    .download-btn:hover {{ background: #059669; }}
+    .download-btn.zip {{
+        background: #F59E0B;
+    }}
+    .download-btn.zip:hover {{
+        background: #D97706;
+    }}
+    .search-box {{
+        padding: 20px 30px;
+        background: #F9FAFB;
+        border-bottom: 1px solid #E5E7EB;
+    }}
+    .search-box input {{
+        width: 100%;
+        padding: 12px 20px;
+        border: 2px solid #E5E7EB;
+        border-radius: 8px;
+        font-size: 14px;
+    }}
+    .search-box input:focus {{
+        outline: none;
+        border-color: #6366F1;
+    }}
+
+    /* ✅ RESPONSIVE: preserve side alignment without wrapping */
+    @media (max-width: 768px) {{
+        body {{ padding: 0; }}
+        .container {{ border-radius: 0; }}
         .file-item {{
-            display: flex;
-            align-items: center;
-            padding: 15px;
-            border-bottom: 1px solid #E5E7EB;
-            transition: background 0.2s;
+            flex-direction: row;
+            align-items: flex-start;
+            padding: 12px;
         }}
-        .file-item:hover {{ background: #F9FAFB; }}
-        .file-icon {{
-            font-size: 32px;
-            margin-right: 15px;
-            min-width: 32px;
-        }}
-        .file-info {{ flex: 1; }}
-        .file-name {{
-            color: #111827;
-            text-decoration: none;
-            font-weight: 500;
-            display: block;
-        }}
-        .file-name:hover {{ color: #6366F1; }}
-        .file-meta {{
-            color: #6B7280;
-            font-size: 0.85em;
-            margin-top: 5px;
+        .file-info {{
+            flex: 1 1 auto;
+            overflow-wrap: anywhere;
         }}
         .file-actions {{
-            display: flex;
-            gap: 10px;
+            gap: 6px;
+            min-width: auto;
         }}
         .download-btn {{
-            background: #10B981;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            text-decoration: none;
-            font-size: 0.85em;
-            transition: background 0.2s;
+            padding: 7px 10px;
+            font-size: 0.8em;
         }}
-        .download-btn:hover {{
-            background: #059669;
+    }}
+
+    @media (max-width: 480px) {{
+        .header h1 {{ font-size: 1.6em; }}
+        .file-meta {{ font-size: 0.8em; }}
+        .download-btn {{
+            padding: 6px 8px;
+            font-size: 0.78em;
         }}
-        .download-btn.zip {{
-            background: #F59E0B;
-        }}
-        .download-btn.zip:hover {{
-            background: #D97706;
-        }}
-        .search-box {{
-            padding: 20px 30px;
-            background: #F9FAFB;
-            border-bottom: 1px solid #E5E7EB;
-        }}
-        .search-box input {{
-            width: 100%;
-            padding: 12px 20px;
-            border: 2px solid #E5E7EB;
-            border-radius: 8px;
-            font-size: 14px;
-        }}
-        .search-box input:focus {{
-            outline: none;
-            border-color: #6366F1;
-        }}
-        @media (max-width: 768px) {{
-            .container {{ border-radius: 0; }}
-            body {{ padding: 0; }}
-            .file-actions {{
-                flex-direction: column;
-                gap: 5px;
-            }}
-            .download-btn {{
-                padding: 6px 12px;
-                font-size: 0.8em;
-            }}
-        }}
-    </style>
+    }}
+</style>
+
+
 </head>
 <body>
     <div class="container">
@@ -526,16 +578,20 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 size = stat.st_size
                 mtime = datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M')
                 
+                # Get the relative path from the current directory
+                current_dir = os.getcwd()
+                relative_path = os.path.relpath(fullname, current_dir)
+                
                 if is_dir:
                     icon = "📁"
                     displayname += "/"
                     linkname += "/"
                     size_str = "-"
-                    download_btn = f'<a href="/download/{urllib.parse.quote(fullname)}" class="download-btn zip" title="Download as ZIP">📦 ZIP</a>'
+                    download_btn = f'<a href="/download/{urllib.parse.quote(relative_path)}" class="download-btn zip" title="Download as ZIP">📦 ZIP</a>'
                 else:
                     icon = self._get_file_icon(name)
                     size_str = self._format_size(size)
-                    download_btn = f'<a href="/download/{urllib.parse.quote(fullname)}" class="download-btn" title="Download file">⬇️ Download</a>'
+                    download_btn = f'<a href="/download/{urllib.parse.quote(relative_path)}" class="download-btn" title="Download file">⬇️ Download</a>'
                 
                 html += f"""
                 <div class="file-item">
@@ -553,7 +609,7 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 continue
         
         return html if html else '<p style="text-align:center;padding:40px;color:#6B7280;">No files found</p>'
-    
+        
     def _get_file_icon(self, filename):
         """Get emoji icon for file type"""
         ext = os.path.splitext(filename)[1].lower()
@@ -973,11 +1029,16 @@ class MainScreen(Screen):
             height=dp(56)
         )
         dir_card.add_widget(self.directory_input)
-        
+        from kivy.uix.widget import Widget
+        dir_card.add_widget(Widget(size_hint_y=None, height=dp(3)))
         # Browse button
-        browse_btn = MDFlatButton(
+        browse_btn = MDRaisedButton(
             text="Browse Common Folders",
-            on_release=self.show_folder_picker
+            md_bg_color=(0, 0.8, 0.4, 1),  # Green
+            text_color=(1, 1, 1, 1),       # White text
+            on_release=self.show_folder_picker,
+            size_hint_y=None,
+            height=dp(48)
         )
         dir_card.add_widget(browse_btn)
         
@@ -1096,10 +1157,10 @@ class MainScreen(Screen):
         layout.add_widget(scroll)
         self.add_widget(layout)
     
+
+
     def show_folder_picker(self, instance):
-        """Show dialog with common folders"""
-        common_folders = []
-        
+        """Show a clean, scrollable folder picker dialog"""
         if kivy_platform == 'android':
             base = "/storage/emulated/0/"
             common_folders = [
@@ -1119,24 +1180,41 @@ class MainScreen(Screen):
                 ("Documents", os.path.join(home, "Documents")),
                 ("Desktop", os.path.join(home, "Desktop")),
             ]
-        
-        buttons = []
+
+        # Create scrollable content
+        folder_list = MDList()
         for name, path in common_folders:
             if os.path.exists(path):
-                btn = MDFlatButton(
+                item = OneLineListItem(
                     text=f"📁 {name}",
-                    on_release=lambda x, p=path: self.select_folder(p)
+                    on_release=lambda x, p=path: self.select_folder_from_dialog(p)
                 )
-                buttons.append(btn)
-        
-        buttons.append(MDRaisedButton(text="CANCEL", on_release=lambda x: self.folder_dialog.dismiss()))
-        
+                folder_list.add_widget(item)
+
+        scroll = MDScrollView(size_hint_y=None, height="300dp")
+        scroll.add_widget(folder_list)
+
+        # Create the dialog
         self.folder_dialog = MDDialog(
             title="Select Folder",
-            type="simple",
-            buttons=buttons
+            type="custom",
+            content_cls=scroll,
+            buttons=[
+                MDFlatButton(
+                    text="CANCEL",
+                    on_release=lambda x: self.folder_dialog.dismiss()
+                ),
+            ],
         )
+
         self.folder_dialog.open()
+
+
+    def select_folder_from_dialog(self, path):
+        """Handle folder selection"""
+        self.folder_dialog.dismiss()
+        self.select_folder(path)
+
     
     def select_folder(self, path):
         """Set selected folder"""
