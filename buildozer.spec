@@ -70,8 +70,6 @@ android.enable_androidx = True
 
 # (list) Android Gradle dependencies to add
 # CRITICAL: Compatible versions for API 34
-android.gradle_dependencies = androidx.appcompat:appcompat:1.6.1,androidx.core:core-ktx:1.12.0
-
 # (bool) Add SDK Manager available packages and update them
 android.accept_sdk_license = True
 
