@@ -41,7 +41,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.core.window import Window
 from kivy.clock import Clock
-from kivy.utils import get_color_from_hex, platform as kivy_platform
+from kivy.utils import get_color_from_hex, platform as platform
 from kivy.metrics import dp, sp
 from kivy.core.image import Image as CoreImage
 from kivy.animation import Animation
@@ -56,7 +56,7 @@ from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.uix.snackbar import Snackbar
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.spinner import MDSpinner
-from kivy.utils import platform as kivy_platform
+from kivy.utils import platform as platform
 from kivymd.uix.list import MDList, OneLineListItem
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.dialog import MDDialog
@@ -69,7 +69,7 @@ except ImportError:
     MDIcon = MDLabel
 
 # Android-specific imports
-if kivy_platform == 'android':
+if platform == 'android':
     try:
         from android.permissions import request_permissions, check_permission
         from android.storage import primary_external_storage_path
@@ -793,7 +793,7 @@ class ServerManager:
                 self.is_running = True
                 
                 # Start foreground service on Android
-                if kivy_platform == 'android':
+                if platform == 'android':
                     ip = self.get_local_ip()
                     self.foreground_service.start_service(ip, port)
                 
@@ -829,7 +829,7 @@ class ServerManager:
                 self._stop_event.set()
                 
                 # Stop foreground service
-                if kivy_platform == 'android':
+                if platform == 'android':
                     self.foreground_service.stop_service()
                 
                 # Shutdown server
@@ -1017,7 +1017,7 @@ class MainScreen(Screen):
         dir_card.add_widget(dir_label)
         
         # Pre-fill directory
-        default_path = DEFAULT_ANDROID_PATH if kivy_platform == 'android' else os.path.expanduser("~")
+        default_path = DEFAULT_ANDROID_PATH if platform == 'android' else os.path.expanduser("~")
         
         self.directory_input = MDTextField(
             text=default_path,
@@ -1161,7 +1161,7 @@ class MainScreen(Screen):
 
     def show_folder_picker(self, instance):
         """Show a clean, scrollable folder picker dialog"""
-        if kivy_platform == 'android':
+        if platform == 'android':
             base = "/storage/emulated/0/"
             common_folders = [
                 ("Internal Storage", base),
@@ -1232,7 +1232,7 @@ class MainScreen(Screen):
     def start_server(self):
         """Start the server with permission validation"""
         # Check Android permissions first
-        if kivy_platform == 'android' and ANDROID_IMPORTS_OK:
+        if platform == 'android' and ANDROID_IMPORTS_OK:
             try:
                 if Build.VERSION.SDK_INT >= 30:
                     if not Environment.isExternalStorageManager():
@@ -1662,7 +1662,7 @@ class LogScreen(Screen):
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"pyserver_logs_{timestamp}.txt"
             
-            if kivy_platform == 'android':
+            if platform == 'android':
                 path = os.path.join("/storage/emulated/0/Download", filename)
             else:
                 path = os.path.join(os.path.expanduser("~"), filename)
@@ -1722,7 +1722,7 @@ class PyServerApp(MDApp):
         self.theme_cls.material_style = "M3"
 
         # Configure window
-        if kivy_platform != 'android':
+        if platform != 'android':
             Window.size = (400, 700)
         Window.clearcolor = get_color_from_hex(COLORS['background'])
 
@@ -1735,7 +1735,7 @@ class PyServerApp(MDApp):
         sm.add_widget(LogScreen(name='logs'))
         
         # Check permissions immediately
-        if kivy_platform == 'android':
+        if platform == 'android':
             Clock.schedule_once(lambda dt: self.check_and_request_permissions(), 0.5)
         
         return sm
@@ -1849,6 +1849,71 @@ class PyServerApp(MDApp):
         logger.log("App resumed", "INFO")
         if self.server_manager.is_running:
             logger.log("Server still running in background", "INFO")
+
+    def check_and_request_storage_permissions(self):
+        if platform =='linux':
+            return
+            
+        if not Environment.isExternalStorageManager():
+            self.show_storage_permission_dialog()
+        else:
+            print("Already have all files access permission")
+        return True
+
+
+
+    def show_storage_permission_dialog(self):
+        """Show dialog explaining why we need storage permission"""
+        dialog = MDDialog(
+            title="Storage Permission Required",
+            text="This app needs permission to manage files in external storage. Please enable 'Allow all files access' in the next screen.",
+            buttons=[
+                MDFlatButton(
+                    text="CANCEL",
+                    on_release=lambda x: dialog.dismiss()
+                ),
+                MDFlatButton(
+                    text="SETTINGS",
+                    on_release=lambda x: self.open_all_files_settings()
+                ),
+            ],
+        )
+        dialog.open()
+
+    def open_all_files_settings(self):
+        """Open Android settings for all files access"""
+        if platform == 'android':
+            activity = PythonActivity.mActivity
+            
+            # Create intent for "All files access" settings page
+            intent = Intent()
+            intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            
+            # Set package URI
+            uri = Uri.fromParts("package", "com.share.server", None)
+            intent.setData(uri)
+            
+            # Start the settings activity
+            activity.startActivity(intent)
+            
+            # Schedule a check after returning from settings
+            Clock.schedule_once(self.check_permission_after_return, 1)
+
+
+    def check_permission_after_return(self, dt):
+        """Check if permission was granted after returning from settings"""
+        if platform == 'android':
+            if Environment.isExternalStorageManager():
+                print("All files access permission granted!")
+                # Proceed with your file operations
+                self.initialize_storage()
+            else:
+                print("All files access permission not granted")
+                # Optionally show another dialog or handle denial
+
+    def on_start(self):
+        """Check permissions when app starts"""
+        self.check_and_request_storage_permissions()
 
     def on_stop(self):
         """Clean up when app stops"""
