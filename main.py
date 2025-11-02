@@ -1132,14 +1132,21 @@ class MainScreen(Screen):
         # Check Android permissions first
         if platform == 'android' and ANDROID_IMPORTS_OK:
             try:
-                if VERSION.SDK_INT >= 30:
+                # Correct way to check Android version
+                if hasattr(Build, 'VERSION') and hasattr(Build.VERSION, 'SDK_INT'):
+                    sdk_int = Build.VERSION.SDK_INT
+                else:
+                    # Fallback: try to get SDK_INT directly from VERSION class
+                    sdk_int = VERSION.SDK_INT if hasattr(VERSION, 'SDK_INT') else 0
+                
+                if sdk_int >= 30:
                     if not Environment.isExternalStorageManager():
                         self.show_permission_error()
                         return
             except Exception as e:
                 logger.log(f"Permission check error: {e}", "ERROR")
-                self.show_permission_error()
-                return
+                # Continue anyway and let the server fail gracefully
+                self.show_snackbar("Warning: Permission check failed, server may not work", success=False)
 
         directory = self.directory_input.text.strip()
         
@@ -1160,6 +1167,7 @@ class MainScreen(Screen):
             Clock.schedule_once(lambda dt: self.on_server_started(success, message), 0)
         
         threading.Thread(target=start_thread, daemon=True).start()
+
 
     def on_server_started(self, success, message):
         """Handle server start result"""
@@ -1661,21 +1669,37 @@ class PyServerApp(MDApp):
         except Exception as e:
             logger.log(f"Permission check error: {e}", "ERROR")
 
+
     def check_storage_permissions(self):
         """Check and request storage permissions"""
         try:
+            # Get Android SDK version safely
+            sdk_int = 0
+            if hasattr(Build, 'VERSION') and hasattr(Build.VERSION, 'SDK_INT'):
+                sdk_int = Build.VERSION.SDK_INT
+            elif hasattr(VERSION, 'SDK_INT'):
+                sdk_int = VERSION.SDK_INT
+            
+            logger.log(f"Android SDK version: {sdk_int}", "INFO")
+            
             # Android 11+ (API 30 and above) - All Files Access
-            if Build.VERSION.SDK_INT >= 30:
-                if not Environment.isExternalStorageManager():
-                    logger.log("All Files Access permission needed", "WARNING")
-                    # Show dialog immediately
-                    Clock.schedule_once(lambda dt: self.show_permission_dialog(), 0.2)
-                else:
-                    logger.log("✅ All Files Access permission granted", "INFO")
-                    self._permissions_granted = True
+            if sdk_int >= 30:
+                try:
+                    if not Environment.isExternalStorageManager():
+                        logger.log("All Files Access permission needed", "WARNING")
+                        # Show dialog immediately
+                        Clock.schedule_once(lambda dt: self.show_permission_dialog(), 0.2)
+                    else:
+                        logger.log("✅ All Files Access permission granted", "INFO")
+                        self._permissions_granted = True
+                except Exception as e:
+                    logger.log(f"All Files Access check error: {e}", "ERROR")
+                    # Continue without permission, server might still work for some directories
 
             # Android 10 and below - Regular storage permissions
             else:
+                from android.permissions import Permission, check_permission, request_permissions
+                
                 perms_to_check = [
                     Permission.READ_EXTERNAL_STORAGE,
                     Permission.WRITE_EXTERNAL_STORAGE
@@ -1691,6 +1715,9 @@ class PyServerApp(MDApp):
 
         except Exception as e:
             logger.log(f"Storage permission check error: {e}", "ERROR")
+            # Don't block the app if permission checks fail
+            self._permissions_granted = True  # Assume granted to allow app to function
+
 
     def storage_permission_callback(self, permissions, grant_results):
         """Callback for storage permission request (Android 10 and below)"""
@@ -1805,18 +1832,28 @@ class PyServerApp(MDApp):
             self._waiting_for_permission = False
             Clock.schedule_once(self.verify_all_files_permission, 0.5)
 
+
     def verify_all_files_permission(self, dt):
+        """Verify if All Files Access permission was granted"""
         try:
-            if Build.VERSION.SDK_INT >= 30:
+            # Get Android SDK version safely
+            sdk_int = 0
+            if hasattr(Build, 'VERSION') and hasattr(Build.VERSION, 'SDK_INT'):
+                sdk_int = Build.VERSION.SDK_INT
+            elif hasattr(VERSION, 'SDK_INT'):
+                sdk_int = VERSION.SDK_INT
+            
+            if sdk_int >= 30:
                 if Environment.isExternalStorageManager():
                     logger.log("✅ All Files Access permission granted!", "INFO")
                     self._permissions_granted = True
                     self.show_success_snackbar("Permission granted! Server ready.")
                 else:
                     logger.log("⚠️ Permission still not granted", "WARNING")
+                    # Don't show error here - user might grant later
         except Exception as e:
             logger.log(f"Permission verification error: {e}", "ERROR")
-            
+
 
 # ============================================================================
 # APPLICATION ENTRY POINT
