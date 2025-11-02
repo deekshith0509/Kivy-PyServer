@@ -41,7 +41,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.core.window import Window
 from kivy.clock import Clock
-from kivy.utils import get_color_from_hex, platform as platform
+from kivy.utils import get_color_from_hex, platform as kivy_platform
 from kivy.metrics import dp, sp
 from kivy.core.image import Image as CoreImage
 from kivy.animation import Animation
@@ -56,11 +56,8 @@ from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.uix.snackbar import Snackbar
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.spinner import MDSpinner
-from kivy.utils import platform as platform
 from kivymd.uix.list import MDList, OneLineListItem
 from kivymd.uix.scrollview import MDScrollView
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDFlatButton
 
 # Try to import MDIcon
 try:
@@ -69,14 +66,14 @@ except ImportError:
     MDIcon = MDLabel
 
 # Android-specific imports
-if platform == 'android':
+if kivy_platform == 'android':
     try:
-        from android.permissions import request_permissions, check_permission
+        from android.permissions import request_permissions, check_permission, Permission
         from android.storage import primary_external_storage_path
         from jnius import autoclass, cast
 
         Build = autoclass('android.os.Build')
-        VERSION = autoclass('android.os.Build$VERSION')  # ✅ Fixed nested class
+        BuildVersion = autoclass('android.os.Build$VERSION')  # ✅ FIXED: Renamed to avoid conflict
         Environment = autoclass('android.os.Environment')
         Intent = autoclass('android.content.Intent')
         Settings = autoclass('android.provider.Settings')
@@ -96,7 +93,7 @@ else:
 # CONSTANTS & CONFIGURATION
 # ============================================================================
 
-VERSION = "1.0.0"
+APP_VERSION = "1.0.0"  # ✅ FIXED: Renamed from VERSION to avoid conflict
 DEFAULT_PORT = 8000
 BUFFER_SIZE = 8192
 LOG_MAX_LINES = 1000
@@ -182,7 +179,7 @@ import shutil
 class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
     """HTTP handler with modern UI, file management, and download functionality"""
     
-    server_version = f"PyServer/{VERSION}"
+    server_version = f"PyServer/{APP_VERSION}"
     
     def log_message(self, format, *args):
         """Override to use our logger"""
@@ -215,7 +212,6 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_GET()
     
-
     def handle_download(self):
         """Handle file/folder download requests"""
         try:
@@ -253,8 +249,6 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             logger.log(f"Download error: {e}", "ERROR")
             self.send_error(500, f"Download failed: {str(e)}")
-
-
     
     def download_file(self, file_path):
         """Serve a file for download"""
@@ -399,13 +393,13 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
     .file-item {{
         display: flex;
-        align-items: flex-start; /* ✅ align top to match multi-line names */
+        align-items: flex-start;
         justify-content: space-between;
         gap: 10px;
         padding: 15px;
         border-bottom: 1px solid #E5E7EB;
         transition: background 0.2s;
-        flex-wrap: nowrap; /* ✅ keeps buttons to right */
+        flex-wrap: nowrap;
         word-break: break-word;
     }}
     .file-item:hover {{ background: #F9FAFB; }}
@@ -426,7 +420,7 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         font-weight: 500;
         display: block;
         word-wrap: anywhere;
-        white-space: normal; /* ✅ allows wrapping text naturally */
+        white-space: normal;
     }}
     .file-name:hover {{ color: #6366F1; }}
     .file-meta {{
@@ -478,7 +472,6 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         border-color: #6366F1;
     }}
 
-    /* ✅ RESPONSIVE: preserve side alignment without wrapping */
     @media (max-width: 768px) {{
         body {{ padding: 0; }}
         .container {{ border-radius: 0; }}
@@ -510,8 +503,6 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         }}
     }}
 </style>
-
-
 </head>
 <body>
     <div class="container">
@@ -915,7 +906,7 @@ class MainScreen(Screen):
         dir_card.add_widget(dir_label)
         
         # Pre-fill directory
-        default_path = DEFAULT_ANDROID_PATH if platform == 'android' else os.path.expanduser("~")
+        default_path = DEFAULT_ANDROID_PATH if kivy_platform == 'android' else os.path.expanduser("~")
         
         self.directory_input = MDTextField(
             text=default_path,
@@ -927,13 +918,15 @@ class MainScreen(Screen):
             height=dp(56)
         )
         dir_card.add_widget(self.directory_input)
+        
         from kivy.uix.widget import Widget
         dir_card.add_widget(Widget(size_hint_y=None, height=dp(3)))
+        
         # Browse button
         browse_btn = MDRaisedButton(
             text="Browse Common Folders",
-            md_bg_color=(0, 0.8, 0.4, 1),  # Green
-            text_color=(1, 1, 1, 1),       # White text
+            md_bg_color=(0, 0.8, 0.4, 1),
+            text_color=(1, 1, 1, 1),
             on_release=self.show_folder_picker,
             size_hint_y=None,
             height=dp(48)
@@ -943,8 +936,6 @@ class MainScreen(Screen):
         content.add_widget(dir_card)
         
         # QR Code card
-
-        
         qr_card = MDCard(
             orientation='vertical',
             padding=dp(20),
@@ -955,14 +946,14 @@ class MainScreen(Screen):
             radius=[dp(16)]
         )
 
-        # --- Container inside card ---
+        # Container inside card
         qr_container = BoxLayout(
             orientation='vertical',
-            padding=[0, dp(10), 0, dp(10)],  # top/bottom padding
+            padding=[0, dp(10), 0, dp(10)],
             spacing=dp(10)
         )
 
-        # --- Label (top) ---
+        # Label (top)
         qr_label = MDLabel(
             text="Scan to Connect",
             font_style="H6",
@@ -972,14 +963,14 @@ class MainScreen(Screen):
             height=dp(30)
         )
 
-        # --- QR Image (middle) ---
+        # QR Image (middle)
         self.qr_image = Image(
             size_hint=(None, None),
             size=(dp(210), dp(210)),
             pos_hint={'center_x': 0.5}
         )
 
-        # --- Hint Label (bottom) ---
+        # Hint Label (bottom)
         self.qr_hint = MDLabel(
             text="QR code will appear when server starts",
             theme_text_color="Hint",
@@ -989,13 +980,14 @@ class MainScreen(Screen):
             height=dp(20)
         )
 
-        # --- Add in correct order ---
+        # Add in correct order
         qr_container.add_widget(qr_label)
         qr_container.add_widget(self.qr_image)
         qr_container.add_widget(self.qr_hint)
 
         qr_card.add_widget(qr_container)
         content.add_widget(qr_card)
+        
         # Action buttons
         actions_card = MDCard(
             orientation='vertical',
@@ -1055,11 +1047,9 @@ class MainScreen(Screen):
         layout.add_widget(scroll)
         self.add_widget(layout)
     
-
-
     def show_folder_picker(self, instance):
         """Show a clean, scrollable folder picker dialog"""
-        if platform == 'android':
+        if kivy_platform == 'android':
             base = "/storage/emulated/0/"
             common_folders = [
                 ("Internal Storage", base),
@@ -1107,12 +1097,10 @@ class MainScreen(Screen):
 
         self.folder_dialog.open()
 
-
     def select_folder_from_dialog(self, path):
         """Handle folder selection"""
         self.folder_dialog.dismiss()
         self.select_folder(path)
-
     
     def select_folder(self, path):
         """Set selected folder"""
@@ -1130,23 +1118,16 @@ class MainScreen(Screen):
     def start_server(self):
         """Start the server with permission validation"""
         # Check Android permissions first
-        if platform == 'android' and ANDROID_IMPORTS_OK:
+        if kivy_platform == 'android' and ANDROID_IMPORTS_OK:
             try:
-                # Correct way to check Android version
-                if hasattr(Build, 'VERSION') and hasattr(Build.VERSION, 'SDK_INT'):
-                    sdk_int = Build.VERSION.SDK_INT
-                else:
-                    # Fallback: try to get SDK_INT directly from VERSION class
-                    sdk_int = VERSION.SDK_INT if hasattr(VERSION, 'SDK_INT') else 0
-                
-                if sdk_int >= 30:
+                if BuildVersion.SDK_INT >= 30:  # ✅ FIXED: Using BuildVersion
                     if not Environment.isExternalStorageManager():
                         self.show_permission_error()
                         return
             except Exception as e:
                 logger.log(f"Permission check error: {e}", "ERROR")
-                # Continue anyway and let the server fail gracefully
-                self.show_snackbar("Warning: Permission check failed, server may not work", success=False)
+                self.show_permission_error()
+                return
 
         directory = self.directory_input.text.strip()
         
@@ -1167,7 +1148,6 @@ class MainScreen(Screen):
             Clock.schedule_once(lambda dt: self.on_server_started(success, message), 0)
         
         threading.Thread(target=start_thread, daemon=True).start()
-
 
     def on_server_started(self, success, message):
         """Handle server start result"""
@@ -1190,7 +1170,6 @@ class MainScreen(Screen):
             # Generate QR code
             self.generate_qr_code(url)
             
-            # self.show_snackbar("✅ Server started successfully!", success=True)
         else:
             self.show_error_dialog("Server Error", message)
     
@@ -1278,6 +1257,7 @@ class MainScreen(Screen):
             auto_dismiss=False
         )
         self.loading_dialog.open()
+    
     def show_permission_error(self):
         """Show permission error dialog"""
         dialog = MDDialog(
@@ -1328,9 +1308,8 @@ class MainScreen(Screen):
         dialog.open()
     
     def show_snackbar(self, message: str, success: bool = True):
-        """Show modern snackbar - FIXED VERSION"""
+        """Show modern snackbar"""
         try:
-            # Create a custom snackbar implementation to avoid property conflicts
             snackbar_content = BoxLayout(
                 orientation='horizontal',
                 padding=dp(15),
@@ -1339,7 +1318,6 @@ class MainScreen(Screen):
                 height=dp(50)
             )
             
-            # Add message label
             message_label = MDLabel(
                 text=message,
                 theme_text_color="Custom",
@@ -1348,7 +1326,6 @@ class MainScreen(Screen):
             )
             snackbar_content.add_widget(message_label)
             
-            # Create the actual snackbar
             snackbar = Snackbar(
                 snackbar_x="10dp",
                 snackbar_y="10dp",
@@ -1357,12 +1334,10 @@ class MainScreen(Screen):
                 duration=2.5
             )
             
-            # Add our custom content
             snackbar.add_widget(snackbar_content)
             snackbar.open()
             
         except Exception as e:
-            # Fallback to simple snackbar if the above fails
             try:
                 snackbar = Snackbar(
                     snackbar_x="10dp",
@@ -1372,7 +1347,6 @@ class MainScreen(Screen):
                     duration=2.5
                 )
                 
-                # Try different property names
                 if hasattr(snackbar, 'text'):
                     snackbar.text = message
                 elif hasattr(snackbar, 'label'):
@@ -1386,7 +1360,7 @@ class MainScreen(Screen):
         """Show about dialog"""
         dialog = MDDialog(
             title="About PyServer",
-            text=f"Version {VERSION}\n\nA modern HTTP file server for Android.\n\nServe files from your device over your local network.",
+            text=f"Version {APP_VERSION}\n\nA modern HTTP file server for Android.\n\nServe files from your device over your local network.",
             buttons=[
                 MDRaisedButton(text="OK", on_release=lambda x: dialog.dismiss())
             ]
@@ -1569,7 +1543,7 @@ class LogScreen(Screen):
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"pyserver_logs_{timestamp}.txt"
             
-            if platform == 'android':
+            if kivy_platform == 'android':
                 path = os.path.join("/storage/emulated/0/Download", filename)
             else:
                 path = os.path.join(os.path.expanduser("~"), filename)
@@ -1594,7 +1568,6 @@ class LogScreen(Screen):
                 duration=2
             )
             
-            # Try different property names
             if hasattr(snackbar, 'text'):
                 snackbar.text = message
             elif hasattr(snackbar, 'label'):
@@ -1613,16 +1586,16 @@ class LogScreen(Screen):
 # MAIN APPLICATION
 # ============================================================================
 
-
 class PyServerApp(MDApp):
     """Main PyServer application with full lifecycle management"""
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.server_manager = ServerManager()
         self._is_stopping = False
         self._permission_checked = False
         self._permissions_granted = False
-        self._waiting_for_permission = False  # New flag
+        self._waiting_for_permission = False
 
         # Theme setup
         self.theme_cls.primary_palette = "Indigo"
@@ -1631,11 +1604,11 @@ class PyServerApp(MDApp):
         self.theme_cls.material_style = "M3"
 
         # Window setup
-        if platform != 'android':
+        if kivy_platform != 'android':
             Window.size = (400, 700)
         Window.clearcolor = get_color_from_hex(COLORS['background'])
 
-        logger.log(f"PyServer v{VERSION} initialized", "INFO")
+        logger.log(f"PyServer v{APP_VERSION} initialized", "INFO")
 
     def build(self):
         """Build the app and setup screens"""
@@ -1646,14 +1619,9 @@ class PyServerApp(MDApp):
 
     def on_start(self):
         """Runs after UI initialized"""
-        if platform == 'android':
-            # Delay permission check to ensure activity is ready
-            from android.permissions import Permission, check_permission, request_permissions
+        if kivy_platform == 'android':
             Clock.schedule_once(lambda dt: self.check_and_request_permissions(), 1.5)
 
-    # ----------------------------------------------------------------------
-    # PERMISSION HANDLING
-    # ----------------------------------------------------------------------
     def check_and_request_permissions(self):
         """Check and request all necessary permissions"""
         if self._permission_checked or not ANDROID_IMPORTS_OK:
@@ -1663,43 +1631,24 @@ class PyServerApp(MDApp):
         logger.log("Checking permissions on app start...", "INFO")
 
         try:
-            # Check storage permissions
             self.check_storage_permissions()
-
         except Exception as e:
             logger.log(f"Permission check error: {e}", "ERROR")
-
 
     def check_storage_permissions(self):
         """Check and request storage permissions"""
         try:
-            # Get Android SDK version safely
-            sdk_int = 0
-            if hasattr(Build, 'VERSION') and hasattr(Build.VERSION, 'SDK_INT'):
-                sdk_int = Build.VERSION.SDK_INT
-            elif hasattr(VERSION, 'SDK_INT'):
-                sdk_int = VERSION.SDK_INT
-            
-            logger.log(f"Android SDK version: {sdk_int}", "INFO")
-            
             # Android 11+ (API 30 and above) - All Files Access
-            if sdk_int >= 30:
-                try:
-                    if not Environment.isExternalStorageManager():
-                        logger.log("All Files Access permission needed", "WARNING")
-                        # Show dialog immediately
-                        Clock.schedule_once(lambda dt: self.show_permission_dialog(), 0.2)
-                    else:
-                        logger.log("✅ All Files Access permission granted", "INFO")
-                        self._permissions_granted = True
-                except Exception as e:
-                    logger.log(f"All Files Access check error: {e}", "ERROR")
-                    # Continue without permission, server might still work for some directories
+            if BuildVersion.SDK_INT >= 30:  # ✅ FIXED: Using BuildVersion
+                if not Environment.isExternalStorageManager():
+                    logger.log("All Files Access permission needed", "WARNING")
+                    Clock.schedule_once(lambda dt: self.show_permission_dialog(), 0.2)
+                else:
+                    logger.log("✅ All Files Access permission granted", "INFO")
+                    self._permissions_granted = True
 
             # Android 10 and below - Regular storage permissions
             else:
-                from android.permissions import Permission, check_permission, request_permissions
-                
                 perms_to_check = [
                     Permission.READ_EXTERNAL_STORAGE,
                     Permission.WRITE_EXTERNAL_STORAGE
@@ -1715,9 +1664,6 @@ class PyServerApp(MDApp):
 
         except Exception as e:
             logger.log(f"Storage permission check error: {e}", "ERROR")
-            # Don't block the app if permission checks fail
-            self._permissions_granted = True  # Assume granted to allow app to function
-
 
     def storage_permission_callback(self, permissions, grant_results):
         """Callback for storage permission request (Android 10 and below)"""
@@ -1729,7 +1675,6 @@ class PyServerApp(MDApp):
                 self.show_success_snackbar("Permissions granted! Server ready.")
             else:
                 logger.log("⚠️ Storage permissions denied", "WARNING")
-                # Show dialog to explain why permissions are needed
                 Clock.schedule_once(lambda dt: self.show_permission_denied_dialog(), 0.5)
         except Exception as e:
             logger.log(f"Storage callback error: {e}", "ERROR")
@@ -1779,7 +1724,6 @@ class PyServerApp(MDApp):
         )
         dialog.open()
 
-
     def open_app_settings(self, dialog=None):
         """Open app settings page as fallback"""
         if dialog:
@@ -1794,7 +1738,6 @@ class PyServerApp(MDApp):
             logger.log("Opened app settings", "INFO")
         except Exception as e:
             logger.log(f"Failed to open settings: {e}", "ERROR")
-
 
     def show_success_snackbar(self, message):
         """Show a success message"""
@@ -1811,6 +1754,7 @@ class PyServerApp(MDApp):
             pass
 
     def open_all_files_settings(self, dialog=None):
+        """Open All Files Access settings"""
         if dialog:
             dialog.dismiss()
 
@@ -1828,29 +1772,21 @@ class PyServerApp(MDApp):
             self.open_app_settings()
 
     def on_resume(self):
+        """Called when app returns from background"""
         if self._waiting_for_permission:
             self._waiting_for_permission = False
             Clock.schedule_once(self.verify_all_files_permission, 0.5)
 
-
     def verify_all_files_permission(self, dt):
         """Verify if All Files Access permission was granted"""
         try:
-            # Get Android SDK version safely
-            sdk_int = 0
-            if hasattr(Build, 'VERSION') and hasattr(Build.VERSION, 'SDK_INT'):
-                sdk_int = Build.VERSION.SDK_INT
-            elif hasattr(VERSION, 'SDK_INT'):
-                sdk_int = VERSION.SDK_INT
-            
-            if sdk_int >= 30:
+            if BuildVersion.SDK_INT >= 30:  # ✅ FIXED: Using BuildVersion
                 if Environment.isExternalStorageManager():
                     logger.log("✅ All Files Access permission granted!", "INFO")
                     self._permissions_granted = True
                     self.show_success_snackbar("Permission granted! Server ready.")
                 else:
                     logger.log("⚠️ Permission still not granted", "WARNING")
-                    # Don't show error here - user might grant later
         except Exception as e:
             logger.log(f"Permission verification error: {e}", "ERROR")
 
@@ -1858,6 +1794,7 @@ class PyServerApp(MDApp):
 # ============================================================================
 # APPLICATION ENTRY POINT
 # ============================================================================
+
 if __name__ == '__main__':
     try:
         logger.log("Starting PyServer...", "INFO")
@@ -1866,4 +1803,4 @@ if __name__ == '__main__':
         logger.log(f"Fatal error: {e}", "ERROR")
         import traceback
         traceback.print_exc()
-        raise
+        raiseraise
