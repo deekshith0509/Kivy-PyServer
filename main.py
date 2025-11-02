@@ -1010,7 +1010,7 @@ class MainScreen(Screen):
         )
         
         dir_label = MDLabel(
-            text="📁 Server Directory",
+            text="Server Directory",
             font_style="H6",
             theme_text_color="Primary"
         )
@@ -1066,7 +1066,7 @@ class MainScreen(Screen):
 
         # --- Label (top) ---
         qr_label = MDLabel(
-            text="📱 Scan to Connect",
+            text="Scan to Connect",
             font_style="H6",
             theme_text_color="Primary",
             halign="center",
@@ -1077,7 +1077,7 @@ class MainScreen(Screen):
         # --- QR Image (middle) ---
         self.qr_image = Image(
             size_hint=(None, None),
-            size=(dp(180), dp(180)),
+            size=(dp(210), dp(210)),
             pos_hint={'center_x': 0.5}
         )
 
