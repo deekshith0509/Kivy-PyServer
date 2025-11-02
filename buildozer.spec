@@ -77,10 +77,11 @@ android.enable_androidx = True
 android.accept_sdk_license = True
 
 # CRITICAL: Prevent wakelock issues
-android.wakelock = False
-
-# CRITICAL: Allow backup for better app lifecycle
+#android.wakelock = False
+android.wakelock = True
+android.foreground = True
 android.allow_backup = True
+android.keep_alive = True
 
 # (str) Android logcat filters to use
 android.logcat_filters = *:S python:D
