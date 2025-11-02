@@ -1261,7 +1261,7 @@ class MainScreen(Screen):
             success, message = self.server_manager.start(directory, DEFAULT_PORT)
             Clock.schedule_once(lambda dt: self.on_server_started(success, message), 0)
         
-        threading.Thread(target=start_thread, daemon=False).start()
+        threading.Thread(target=start_thread, daemon=True).start()
 
     def on_server_started(self, success, message):
         """Handle server start result"""
@@ -1284,7 +1284,7 @@ class MainScreen(Screen):
             # Generate QR code
             self.generate_qr_code(url)
             
-            self.show_snackbar("✅ Server started successfully!", success=True)
+            # self.show_snackbar("✅ Server started successfully!", success=True)
         else:
             self.show_error_dialog("Server Error", message)
     
@@ -1296,7 +1296,7 @@ class MainScreen(Screen):
             success, message = self.server_manager.stop()
             Clock.schedule_once(lambda dt: self.on_server_stopped(success, message), 0)
         
-        threading.Thread(target=stop_thread, daemon=False).start()
+        threading.Thread(target=stop_thread, daemon=True).start()
     
     def on_server_stopped(self, success, message):
         """Handle server stop result"""
