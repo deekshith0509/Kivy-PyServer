@@ -78,18 +78,10 @@ if platform == 'android':
         Build = autoclass('android.os.Build')
         Environment = autoclass('android.os.Environment')
         Intent = autoclass('android.content.Intent')
-        PendingIntent = autoclass('android.app.PendingIntent')
         Settings = autoclass('android.provider.Settings')
         Uri = autoclass('android.net.Uri')
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
         Context = autoclass('android.content.Context')
-        
-        # Notification components
-        NotificationChannel = autoclass('android.app.NotificationChannel')
-        NotificationManager = autoclass('android.app.NotificationManager')
-        NotificationCompat = autoclass('androidx.core.app.NotificationCompat')
-        AndroidColor = autoclass('android.graphics.Color')
-        AndroidString = autoclass('java.lang.String')
         
         ANDROID_IMPORTS_OK = True
     except Exception as e:
@@ -639,97 +631,6 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 # ============================================================================
-# ANDROID FOREGROUND SERVICE
-# ============================================================================
-
-class AndroidForegroundService:
-    """Manages Android foreground service for background operation"""
-    
-    def __init__(self):
-        self.service_started = False
-        self.notification_id = 1001
-        self.channel_id = "pyserver_channel"
-    
-    def create_notification_channel(self):
-        """Create notification channel (Android 8.0+)"""
-        if not ANDROID_IMPORTS_OK:
-            return
-        
-        try:
-            activity = PythonActivity.mActivity
-            nm = activity.getSystemService(Context.NOTIFICATION_SERVICE)
-            
-            if Build.VERSION.SDK_INT >= 26:
-                channel = NotificationChannel(
-                    self.channel_id,
-                    AndroidString("PyServer Service"),
-                    NotificationManager.IMPORTANCE_LOW
-                )
-                channel.setDescription(AndroidString("Keeps server running"))
-                channel.enableLights(True)
-                channel.setLightColor(AndroidColor.BLUE)
-                nm.createNotificationChannel(channel)
-                logger.log("Notification channel created", "INFO")
-        except Exception as e:
-            logger.log(f"Channel creation error: {e}", "ERROR")
-    
-    def start_service(self, ip: str, port: int):
-        """Start foreground service with notification"""
-        if not ANDROID_IMPORTS_OK:
-            return False
-        
-        try:
-            activity = PythonActivity.mActivity
-            self.create_notification_channel()
-            
-            # Create intent
-            intent = Intent(activity, PythonActivity)
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            
-            flags = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
-            pending_intent = PendingIntent.getActivity(activity, 0, intent, flags)
-            
-            # Build notification
-            builder = NotificationCompat.Builder(activity, self.channel_id)
-            builder.setContentTitle(AndroidString("PyServer Running"))
-            builder.setContentText(AndroidString(f"http://{ip}:{port}"))
-            builder.setSmallIcon(activity.getApplicationInfo().icon)
-            builder.setPriority(NotificationCompat.PRIORITY_LOW)
-            builder.setContentIntent(pending_intent)
-            builder.setOngoing(True)
-            builder.setAutoCancel(False)
-            
-            notification = builder.build()
-            
-            # Show notification
-            nm = activity.getSystemService(Context.NOTIFICATION_SERVICE)
-            nm.notify(self.notification_id, notification)
-            
-            self.service_started = True
-            logger.log("Foreground service started", "INFO")
-            return True
-            
-        except Exception as e:
-            logger.log(f"Service start error: {e}", "ERROR")
-            return False
-    
-    def stop_service(self):
-        """Stop foreground service"""
-        if not ANDROID_IMPORTS_OK or not self.service_started:
-            return
-        
-        try:
-            activity = PythonActivity.mActivity
-            nm = activity.getSystemService(Context.NOTIFICATION_SERVICE)
-            nm.cancel(self.notification_id)
-            
-            self.service_started = False
-            logger.log("Foreground service stopped", "INFO")
-        except Exception as e:
-            logger.log(f"Service stop error: {e}", "ERROR")
-
-
-# ============================================================================
 # SERVER MANAGER
 # ============================================================================
 
@@ -743,7 +644,6 @@ class ServerManager:
         self.port = DEFAULT_PORT
         self.directory = None
         self._lock = threading.Lock()
-        self.foreground_service = AndroidForegroundService()
         self._stop_event = threading.Event()
     
     def start(self, directory: str, port: int = DEFAULT_PORT) -> tuple[bool, str]:
@@ -792,11 +692,6 @@ class ServerManager:
                 
                 self.is_running = True
                 
-                # Start foreground service on Android
-                if platform == 'android':
-                    ip = self.get_local_ip()
-                    self.foreground_service.start_service(ip, port)
-                
                 logger.log(f"Server started on port {port}", "INFO")
                 return True, f"Server started successfully on port {port}"
                 
@@ -828,21 +723,17 @@ class ServerManager:
             try:
                 self._stop_event.set()
                 
-                # Stop foreground service
-                if platform == 'android':
-                    self.foreground_service.stop_service()
-                
                 # Shutdown server
                 if self.server:
                     try:
                         self.server.shutdown()
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.log(f"Server shutdown warning: {e}", "WARNING")
                     
                     try:
                         self.server.server_close()
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.log(f"Server close warning: {e}", "WARNING")
                     
                     self.server = None
                 
@@ -871,10 +762,16 @@ class ServerManager:
             ip = s.getsockname()[0]
             s.close()
             return ip
-        except:
+        except Exception as e:
+            logger.log(f"Failed to get local IP via UDP: {e}", "WARNING")
             try:
-                return socket.gethostbyname(socket.gethostname())
-            except:
+                hostname = socket.gethostname()
+                ip = socket.gethostbyname(hostname)
+                if ip and ip != "127.0.0.1":
+                    return ip
+                return "127.0.0.1"
+            except Exception as e2:
+                logger.log(f"Failed to get local IP via hostname: {e2}", "ERROR")
                 return "127.0.0.1"
 
 
@@ -1378,7 +1275,8 @@ class MainScreen(Screen):
             title="⚠️ Permission Required",
             text=(
                 "All Files Access permission is required to start the HTTP server.\n\n"
-                "This permission allows the server to access and serve files from your device over the local network."
+                "This is required for Android 11+.\n\n"
+                "Please grant this permission on the next screen."
             ),
             buttons=[
                 MDFlatButton(
@@ -1388,13 +1286,13 @@ class MainScreen(Screen):
                 MDRaisedButton(
                     text="GRANT PERMISSION",
                     md_bg_color=get_color_from_hex(COLORS['primary']),
-                    on_release=lambda x: self.open_permission_settings(dialog)
+                    on_release=lambda x: self.open_all_files_settings(dialog)
                 )
             ]
         )
         dialog.open()
 
-    def open_permission_settings(self, dialog):
+    def open_all_files_settings(self, dialog):
         """Open permission settings"""
         dialog.dismiss()
         app = App.get_running_app()
@@ -1755,31 +1653,11 @@ class PyServerApp(MDApp):
         logger.log("Checking permissions on app start...", "INFO")
 
         try:
-            # Android 13+ notifications (request first)
-            if Build.VERSION.SDK_INT >= 33:
-                if not check_permission(Permission.POST_NOTIFICATIONS):
-                    logger.log("Requesting notification permission", "INFO")
-                    request_permissions([Permission.POST_NOTIFICATIONS], self.notification_permission_callback)
-                    return  # Wait for callback before proceeding
-
-            # Now check storage permissions
+            # Check storage permissions
             self.check_storage_permissions()
 
         except Exception as e:
             logger.log(f"Permission check error: {e}", "ERROR")
-
-    def notification_permission_callback(self, permissions, grant_results):
-        """Callback for notification permission request"""
-        try:
-            if grant_results and grant_results[0]:
-                logger.log("✅ Notification permission granted", "INFO")
-            else:
-                logger.log("⚠️ Notification permission denied", "WARNING")
-            
-            # Continue with storage permissions
-            Clock.schedule_once(lambda dt: self.check_storage_permissions(), 0.5)
-        except Exception as e:
-            logger.log(f"Notification callback error: {e}", "ERROR")
 
     def check_storage_permissions(self):
         """Check and request storage permissions"""
