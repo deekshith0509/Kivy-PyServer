@@ -177,8 +177,12 @@ logger = Logger()
 # ENHANCED HTTP REQUEST HANDLER
 # ============================================================================
 
+import zipfile
+import tempfile
+import shutil
+
 class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
-    """HTTP handler with modern UI and file management"""
+    """HTTP handler with modern UI, file management, and download functionality"""
     
     server_version = f"PyServer/{VERSION}"
     
@@ -205,8 +209,116 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
     
+    def do_GET(self):
+        """Handle GET requests including download endpoints"""
+        # Check if this is a download request
+        if self.path.startswith('/download/'):
+            self.handle_download()
+        else:
+            super().do_GET()
+    
+    def handle_download(self):
+        """Handle file/folder download requests"""
+        try:
+            # Extract the path from /download/url/path
+            download_path = self.path[10:]  # Remove '/download/' prefix
+            download_path = urllib.parse.unquote(download_path)
+            
+            # Security check: ensure the path doesn't try to escape the base directory
+            full_path = os.path.abspath(os.path.join(os.getcwd(), download_path.lstrip('/')))
+            base_dir = os.path.abspath(os.getcwd())
+            
+            if not full_path.startswith(base_dir):
+                self.send_error(403, "Access denied")
+                return
+            
+            if not os.path.exists(full_path):
+                self.send_error(404, "File or folder not found")
+                return
+            
+            if os.path.isfile(full_path):
+                # Download single file
+                self.download_file(full_path)
+            elif os.path.isdir(full_path):
+                # Download folder as zip
+                self.download_folder_as_zip(full_path)
+            else:
+                self.send_error(400, "Invalid download target")
+                
+        except Exception as e:
+            logger.log(f"Download error: {e}", "ERROR")
+            self.send_error(500, f"Download failed: {str(e)}")
+    
+    def download_file(self, file_path):
+        """Serve a file for download"""
+        try:
+            file_size = os.path.getsize(file_path)
+            file_name = os.path.basename(file_path)
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Content-Disposition', f'attachment; filename="{file_name}"')
+            self.send_header('Content-Length', str(file_size))
+            self.end_headers()
+            
+            with open(file_path, 'rb') as f:
+                shutil.copyfileobj(f, self.wfile)
+                
+            logger.log(f"File downloaded: {file_name}", "INFO")
+            
+        except Exception as e:
+            logger.log(f"File download error: {e}", "ERROR")
+            self.send_error(500, "File download failed")
+    
+    def download_folder_as_zip(self, folder_path):
+        """Compress and download a folder as zip"""
+        try:
+            folder_name = os.path.basename(folder_path)
+            zip_filename = f"{folder_name}.zip"
+            
+            # Create temporary zip file
+            temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+            temp_zip.close()
+            
+            # Create zip file
+            with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(folder_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Create relative path for zip
+                        arcname = os.path.relpath(file_path, os.path.dirname(folder_path))
+                        zipf.write(file_path, arcname)
+            
+            # Get zip file size
+            zip_size = os.path.getsize(temp_zip.name)
+            
+            # Send zip file
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/zip')
+            self.send_header('Content-Disposition', f'attachment; filename="{zip_filename}"')
+            self.send_header('Content-Length', str(zip_size))
+            self.end_headers()
+            
+            with open(temp_zip.name, 'rb') as f:
+                shutil.copyfileobj(f, self.wfile)
+            
+            # Clean up temporary file
+            os.unlink(temp_zip.name)
+            
+            logger.log(f"Folder downloaded as zip: {folder_name}", "INFO")
+            
+        except Exception as e:
+            logger.log(f"Folder zip download error: {e}", "ERROR")
+            # Clean up temporary file if it exists
+            if 'temp_zip' in locals():
+                try:
+                    os.unlink(temp_zip.name)
+                except:
+                    pass
+            self.send_error(500, "Folder download failed")
+    
     def list_directory(self, path):
-        """Generate modern directory listing"""
+        """Generate modern directory listing with download buttons"""
         try:
             file_list = os.listdir(path)
         except OSError:
@@ -228,7 +340,7 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(500, "Internal server error")
     
     def _generate_html(self, path, file_list, displaypath):
-        """Generate modern HTML interface"""
+        """Generate modern HTML interface with download buttons"""
         breadcrumb = self._generate_breadcrumb(displaypath)
         file_items = self._generate_file_list(path, file_list)
         
@@ -302,6 +414,30 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
             font-size: 0.85em;
             margin-top: 5px;
         }}
+        .file-actions {{
+            display: flex;
+            gap: 10px;
+        }}
+        .download-btn {{
+            background: #10B981;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.85em;
+            transition: background 0.2s;
+        }}
+        .download-btn:hover {{
+            background: #059669;
+        }}
+        .download-btn.zip {{
+            background: #F59E0B;
+        }}
+        .download-btn.zip:hover {{
+            background: #D97706;
+        }}
         .search-box {{
             padding: 20px 30px;
             background: #F9FAFB;
@@ -321,6 +457,14 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         @media (max-width: 768px) {{
             .container {{ border-radius: 0; }}
             body {{ padding: 0; }}
+            .file-actions {{
+                flex-direction: column;
+                gap: 5px;
+            }}
+            .download-btn {{
+                padding: 6px 12px;
+                font-size: 0.8em;
+            }}
         }}
     </style>
 </head>
@@ -369,7 +513,7 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
         return breadcrumb
     
     def _generate_file_list(self, path, file_list):
-        """Generate file list HTML"""
+        """Generate file list HTML with download buttons"""
         html = ""
         
         for name in file_list:
@@ -387,9 +531,11 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
                     displayname += "/"
                     linkname += "/"
                     size_str = "-"
+                    download_btn = f'<a href="/download/{urllib.parse.quote(fullname)}" class="download-btn zip" title="Download as ZIP">📦 ZIP</a>'
                 else:
                     icon = self._get_file_icon(name)
                     size_str = self._format_size(size)
+                    download_btn = f'<a href="/download/{urllib.parse.quote(fullname)}" class="download-btn" title="Download file">⬇️ Download</a>'
                 
                 html += f"""
                 <div class="file-item">
@@ -397,6 +543,9 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
                     <div class="file-info">
                         <a href="{urllib.parse.quote(linkname)}" class="file-name">{displayname}</a>
                         <div class="file-meta">{size_str} • {mtime}</div>
+                    </div>
+                    <div class="file-actions">
+                        {download_btn}
                     </div>
                 </div>
                 """
@@ -426,7 +575,6 @@ class EnhancedHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 return f"{size:.1f} {unit}"
             size /= 1024.0
         return f"{size:.1f} TB"
-
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     """Threaded HTTP server for handling multiple connections"""
@@ -1004,7 +1152,19 @@ class MainScreen(Screen):
             self.start_server()
     
     def start_server(self):
-        """Start the server with validation"""
+        """Start the server with permission validation"""
+        # Check Android permissions first
+        if kivy_platform == 'android' and ANDROID_IMPORTS_OK:
+            try:
+                if Build.VERSION.SDK_INT >= 30:
+                    if not Environment.isExternalStorageManager():
+                        self.show_permission_error()
+                        return
+            except Exception as e:
+                logger.log(f"Permission check error: {e}", "ERROR")
+                self.show_permission_error()
+                return
+
         directory = self.directory_input.text.strip()
         
         if not directory:
@@ -1024,7 +1184,7 @@ class MainScreen(Screen):
             Clock.schedule_once(lambda dt: self.on_server_started(success, message), 0)
         
         threading.Thread(target=start_thread, daemon=False).start()
-    
+
     def on_server_started(self, success, message):
         """Handle server start result"""
         self.dismiss_loading()
@@ -1134,6 +1294,34 @@ class MainScreen(Screen):
             auto_dismiss=False
         )
         self.loading_dialog.open()
+    def show_permission_error(self):
+        """Show permission error dialog"""
+        dialog = MDDialog(
+            title="⚠️ Permission Required",
+            text=(
+                "All Files Access permission is required to start the HTTP server.\n\n"
+                "This permission allows the server to access and serve files from your device over the local network."
+            ),
+            buttons=[
+                MDFlatButton(
+                    text="CANCEL",
+                    on_release=lambda x: dialog.dismiss()
+                ),
+                MDRaisedButton(
+                    text="GRANT PERMISSION",
+                    md_bg_color=get_color_from_hex(COLORS['primary']),
+                    on_release=lambda x: self.open_permission_settings(dialog)
+                )
+            ]
+        )
+        dialog.open()
+
+    def open_permission_settings(self, dialog):
+        """Open permission settings"""
+        dialog.dismiss()
+        app = App.get_running_app()
+        if hasattr(app, 'open_all_files_settings'):
+            app.open_all_files_settings()
     
     def dismiss_loading(self):
         """Dismiss loading dialog"""
@@ -1442,12 +1630,12 @@ class LogScreen(Screen):
 
 class PyServerApp(MDApp):
     """Main PyServer application with full lifecycle management"""
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.server_manager = ServerManager()
         self._is_stopping = False
         self._permissions_requested = False
+        self._permission_checked = False
 
         # Configure theme
         self.theme_cls.primary_palette = "Indigo"
@@ -1462,19 +1650,17 @@ class PyServerApp(MDApp):
 
         logger.log(f"PyServer v{VERSION} initialized", "INFO")
 
-    # ----------------------------------------------------------------------
-    # BUILD
-    # ----------------------------------------------------------------------
     def build(self):
         """Build the application"""
-        if kivy_platform == 'android':
-            Clock.schedule_once(lambda dt: self.request_permissions(), 1)
-
         sm = ScreenManager()
         sm.add_widget(MainScreen(self.server_manager, name='main'))
         sm.add_widget(LogScreen(name='logs'))
+        
+        # Check permissions immediately
+        if kivy_platform == 'android':
+            Clock.schedule_once(lambda dt: self.check_and_request_permissions(), 0.5)
+        
         return sm
-
     # ----------------------------------------------------------------------
     # PERMISSION HANDLING
     # ----------------------------------------------------------------------
@@ -1578,7 +1764,7 @@ class PyServerApp(MDApp):
     def on_pause(self):
         """Handle app pause - server continues running"""
         logger.log("App paused - Server continues in background", "INFO")
-        return False
+        return True
 
     def on_resume(self):
         """Handle app resume"""
@@ -1608,27 +1794,125 @@ class PyServerApp(MDApp):
 
         logger.log("Application stopped", "INFO")
         return True
+    def check_and_request_permissions(self):
+        """Check and request all necessary permissions on app start"""
+        if self._permission_checked or not ANDROID_IMPORTS_OK:
+            return
 
+        self._permission_checked = True
+        logger.log("Checking permissions on app start...", "INFO")
+
+        try:
+            # Check if we have All Files Access permission (Android 11+)
+            if Build.VERSION.SDK_INT >= 30:
+                if not Environment.isExternalStorageManager():
+                    logger.log("All Files Access permission not granted", "WARNING")
+                    self.show_required_permission_dialog()
+                    return
+                else:
+                    logger.log("All Files Access permission granted", "INFO")
+            
+            # For Android 10 and below, check storage permissions
+            elif Build.VERSION.SDK_INT < 30:
+                perms = [
+                    'android.permission.READ_EXTERNAL_STORAGE',
+                    'android.permission.WRITE_EXTERNAL_STORAGE'
+                ]
+                needed = [p for p in perms if not check_permission(p)]
+                if needed:
+                    logger.log("Storage permissions not granted", "WARNING")
+                    request_permissions(needed)
+                else:
+                    logger.log("Storage permissions granted", "INFO")
+            
+            # Request notification permission for Android 13+
+            if Build.VERSION.SDK_INT >= 33:
+                if not check_permission('android.permission.POST_NOTIFICATIONS'):
+                    request_permissions(['android.permission.POST_NOTIFICATIONS'])
+
+        except Exception as e:
+            logger.log(f"Permission check error: {e}", "ERROR")
+
+    def show_required_permission_dialog(self):
+        """Show mandatory permission dialog explaining why All Files Access is required"""
+        dialog = MDDialog(
+            title="🔐 Permission Required for HTTP Server",
+            text=(
+                "PyServer requires 'All Files Access' permission to function properly.\n\n"
+                "This permission is needed to:\n"
+                "• Serve files over your local network\n"
+                "• Access all directories for file sharing\n"
+                "• Stream files to connected devices\n\n"
+                "Without this permission, the HTTP server cannot access files on your device."
+            ),
+            buttons=[
+                MDRaisedButton(
+                    text="GRANT PERMISSION NOW",
+                    md_bg_color=get_color_from_hex(COLORS['primary']),
+                    on_release=lambda x: self.open_all_files_settings(dialog)
+                )
+            ]
+        )
+        dialog.open()
+
+    def open_all_files_settings(self, dialog=None):
+        """Open Android 'All Files Access' settings page"""
+        if dialog:
+            dialog.dismiss()
+
+        try:
+            activity = PythonActivity.mActivity
+            intent = Intent()
+            intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            uri = Uri.fromParts("package", activity.getPackageName(), None)
+            intent.setData(uri)
+            activity.startActivity(intent)
+            logger.log("Opened All Files Access settings", "INFO")
+
+            # Check permission after user returns from settings
+            Clock.schedule_once(self.verify_permission_after_settings, 3)
+            
+        except Exception as e:
+            logger.log(f"Settings open error: {e}", "ERROR")
+            # Fallback to app details settings
+            try:
+                intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                uri = Uri.fromParts("package", activity.getPackageName(), None)
+                intent.setData(uri)
+                activity.startActivity(intent)
+            except Exception as e2:
+                logger.log(f"Fallback settings error: {e2}", "ERROR")
+
+    def verify_permission_after_settings(self, dt):
+        """Verify if permission was granted after user returns from settings"""
+        try:
+            if Build.VERSION.SDK_INT >= 30:
+                if Environment.isExternalStorageManager():
+                    logger.log("✅ All Files Access permission granted!", "INFO")
+                    self.show_success_snackbar("Permission granted! Server can now access files.")
+                else:
+                    logger.log("⚠️ All Files Access still not granted", "WARNING")
+                    self.show_required_permission_dialog()
+        except Exception as e:
+            logger.log(f"Permission verification error: {e}", "ERROR")
+
+    def show_success_snackbar(self, message):
+        """Show success message"""
+        try:
+            snackbar = Snackbar(
+                text=message,
+                snackbar_x="10dp",
+                snackbar_y="10dp",
+                size_hint_x=(Window.width - dp(20)) / Window.width
+            )
+            snackbar.bg_color = get_color_from_hex(COLORS['success'])
+            snackbar.open()
+        except:
+            pass
 
 # ============================================================================
 # APPLICATION ENTRY POINT
 # ============================================================================
-if __name__ == '__main__':
-    try:
-        logger.log("Starting PyServer...", "INFO")
-        PyServerApp().run()
-    except Exception as e:
-        logger.log(f"Fatal error: {e}", "ERROR")
-        import traceback
-        traceback.print_exc()
-        raise
-
-
-
-# ============================================================================
-# APPLICATION ENTRY POINT
-# ============================================================================
-
 if __name__ == '__main__':
     try:
         logger.log("Starting PyServer...", "INFO")
