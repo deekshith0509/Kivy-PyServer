@@ -1613,6 +1613,7 @@ class PyServerApp(MDApp):
         self._is_stopping = False
         self._permission_checked = False
         self._permissions_granted = False
+        self._waiting_for_permission = False  # New flag
 
         # Theme setup
         self.theme_cls.primary_palette = "Indigo"
@@ -1750,26 +1751,6 @@ class PyServerApp(MDApp):
         )
         dialog.open()
 
-    def open_all_files_settings(self, dialog=None):
-        """Open Android 'All Files Access' settings page"""
-        if dialog:
-            dialog.dismiss()
-
-        try:
-            activity = PythonActivity.mActivity
-            intent = Intent()
-            intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-            uri = Uri.fromParts("package", activity.getPackageName(), None)
-            intent.setData(uri)
-            activity.startActivity(intent)
-            logger.log("Opened All Files Access settings", "INFO")
-
-            # Recheck after user returns (with longer delay)
-            Clock.schedule_once(self.verify_all_files_permission, 2)
-
-        except Exception as e:
-            logger.log(f"Error opening settings: {e}", "ERROR")
-            self.open_app_settings()
 
     def open_app_settings(self, dialog=None):
         """Open app settings page as fallback"""
@@ -1786,20 +1767,6 @@ class PyServerApp(MDApp):
         except Exception as e:
             logger.log(f"Failed to open settings: {e}", "ERROR")
 
-    def verify_all_files_permission(self, dt):
-        """Verify if All Files Access permission granted after returning from settings"""
-        try:
-            if Build.VERSION.SDK_INT >= 30:
-                if Environment.isExternalStorageManager():
-                    logger.log("✅ All Files Access permission granted!", "INFO")
-                    self._permissions_granted = True
-                    self.show_success_snackbar("Permission granted! Server ready.")
-                else:
-                    logger.log("⚠️ Permission still not granted", "WARNING")
-                    # Give user another chance
-                    Clock.schedule_once(lambda dt: self.show_permission_dialog(), 1)
-        except Exception as e:
-            logger.log(f"Permission verification error: {e}", "ERROR")
 
     def show_success_snackbar(self, message):
         """Show a success message"""
@@ -1815,6 +1782,40 @@ class PyServerApp(MDApp):
         except Exception:
             pass
 
+    def open_all_files_settings(self, dialog=None):
+        if dialog:
+            dialog.dismiss()
+
+        try:
+            activity = PythonActivity.mActivity
+            intent = Intent()
+            intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            uri = Uri.fromParts("package", activity.getPackageName(), None)
+            intent.setData(uri)
+            activity.startActivity(intent)
+            logger.log("Opened All Files Access settings", "INFO")
+            self._waiting_for_permission = True
+        except Exception as e:
+            logger.log(f"Error opening settings: {e}", "ERROR")
+            self.open_app_settings()
+
+    def on_resume(self):
+        if self._waiting_for_permission:
+            self._waiting_for_permission = False
+            Clock.schedule_once(self.verify_all_files_permission, 0.5)
+
+    def verify_all_files_permission(self, dt):
+        try:
+            if Build.VERSION.SDK_INT >= 30:
+                if Environment.isExternalStorageManager():
+                    logger.log("✅ All Files Access permission granted!", "INFO")
+                    self._permissions_granted = True
+                    self.show_success_snackbar("Permission granted! Server ready.")
+                else:
+                    logger.log("⚠️ Permission still not granted", "WARNING")
+        except Exception as e:
+            logger.log(f"Permission verification error: {e}", "ERROR")
+            
 
 # ============================================================================
 # APPLICATION ENTRY POINT
