@@ -27,10 +27,10 @@ android.permissions = MANAGE_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_EXTERN
 
 
 # (str) Presplash of the application
-#presplash.filename = %(source.dir)s/data/presplash.png
+presplash.filename = presplash.png
 
 # (str) Icon of the application
-#icon.filename = %(source.dir)s/data/icon.png
+icon.filename = icon.png
 
 # (list) Supported orientations
 orientation = portrait
