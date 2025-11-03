@@ -1635,8 +1635,14 @@ class PyServerApp(MDApp):
         sm = ScreenManager()
         sm.add_widget(MainScreen(self.server_manager, name='main'))
         sm.add_widget(LogScreen(name='logs'))
+        self.start_service()
         return sm
 
+    def start_service(self):
+        if platform == 'android':
+            import android
+            android.start_service(title='PyServer he',
+                                  description='Server Running...',arg='')
     def on_start(self):
         """Runs after UI initialized"""
         if kivy_platform == 'android':
