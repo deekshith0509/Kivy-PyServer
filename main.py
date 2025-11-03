@@ -745,44 +745,97 @@ class ServerManager:
                 logger.log(error_msg, "ERROR")
                 self.is_running = False
                 return False, error_msg
-
     def get_local_ip(self):
-        """Fetch the local IP address."""
+        """Get the most relevant local IP (LAN/Wi-Fi/Hotspot/Mobile Data)."""
         ip = None
+        system = platform.system()
+
+        def parse_ifconfig_output(output):
+            """Extracts IPs from ifconfig output."""
+            interfaces = {}
+            current_iface = None
+            for line in output.splitlines():
+                if not line.strip():
+                    continue
+                if not line.startswith(" "):
+                    current_iface = line.split(":")[0]
+                    interfaces[current_iface] = None
+                if 'inet ' in line and '127.0.0.1' not in line:
+                    parts = line.split()
+                    try:
+                        inet_index = parts.index('inet')
+                        ip_addr = parts[inet_index + 1]
+                        interfaces[current_iface] = ip_addr
+                    except Exception:
+                        continue
+            return interfaces
+
         try:
-            # Try getting the IP by connecting to an external server
+            # First, try UDP socket method (works for Wi-Fi/Data with internet)
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
             s.close()
         except Exception:
+            pass
+
+        if not ip or ip.startswith("127."):
             try:
-                if platform.system() == "Windows":
-                    output = subprocess.check_output(['ipconfig'], text=True)
+                if system == "Windows":
+                    output = subprocess.check_output(["ipconfig"], text=True)
                     for line in output.splitlines():
-                        if 'IPv4 Address' in line:
-                            ip = line.split(':')[1].strip()
+                        if "IPv4 Address" in line and "127.0.0.1" not in line:
+                            ip = line.split(":")[-1].strip()
                             break
                 else:
-                    output = subprocess.check_output(['ifconfig'], text=True)
-                    for line in output.splitlines():
-                        if 'inet ' in line and '127.0.0.1' not in line:
-                            ip = line.split()[1]
+                    # Linux / Android-like environment
+                    output = subprocess.check_output(["ifconfig"], text=True)
+                    interfaces = parse_ifconfig_output(output)
+
+                    # Prioritize: LAN > WiFi > Hotspot > Mobile > others
+                    priority_order = [
+                        r"^eth",       # Ethernet / LAN
+                        r"^wlan",      # Wi-Fi
+                        r"^ap",        # Hotspot interface (Android)
+                        r"^ccmni",     # Mobile data (Android)
+                        r"^rmnet",     # Mobile data (Qualcomm)
+                    ]
+
+                    for pattern in priority_order:
+                        for iface, addr in interfaces.items():
+                            if re.match(pattern, iface) and addr:
+                                ip = addr
+                                break
+                        if ip:
                             break
-                    if ip is None:
-                        output = subprocess.check_output(['ip', 'addr'], text=True)
+
+                    # If still no match, pick first available non-loopback IP
+                    if not ip:
+                        for iface, addr in interfaces.items():
+                            if addr:
+                                ip = addr
+                                break
+
+                    # Extra fallback using `ip addr`
+                    if not ip:
+                        output = subprocess.check_output(["ip", "addr"], text=True)
                         for line in output.splitlines():
                             if 'inet ' in line and '127.0.0.1' not in line:
                                 ip = line.split()[1].split('/')[0]
                                 break
+
             except Exception as e:
                 self.log_message(f"Error fetching local IP: {e}")
-        
-        if ip is None or ip.startswith("127."):
-            # As a last resort, try to get the hostname IP
-            ip = socket.gethostbyname(socket.gethostname())
-        
+
+        # Final fallback — hostname-based IP
+        if not ip or ip.startswith("127."):
+            try:
+                ip = socket.gethostbyname(socket.gethostname())
+            except Exception:
+                ip = "127.0.0.1"
+
         return ip
+
 
         
 
