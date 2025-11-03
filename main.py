@@ -746,10 +746,7 @@ class ServerManager:
                 self.is_running = False
                 return False, error_msg
 
-
-
-
-     def get_local_ip(self):
+    def get_local_ip(self):
         """Fetch the local IP address."""
         ip = None
         try:
