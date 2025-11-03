@@ -14,6 +14,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Optional, Callable
 import time
+import platform
 
 # HTTP Server imports
 import http.server
@@ -746,52 +747,141 @@ class ServerManager:
                 return False, error_msg
     
 
+    def get_local_ip(self) -> str:
+        """Get local IP address prioritizing LAN, WiFi, Hotspot, Mobile Data"""
 
-    def get_local_ip():
-        """
-        Get the active local IP address.
-        Works even if connected via hotspot (no Internet/Wi-Fi/LAN).
-        """
+        def classify_interface(iface_name: str, ip: str) -> int:
+            """Classify interface by priority (lower is better)"""
+            iface_name = iface_name.lower()
 
-        try:
-            # First, try normal UDP method (for connected Wi-Fi / data)
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            pass  # No Internet or external route
+            # Priority 0: LAN/Ethernet
+            if any(x in iface_name for x in ['eth', 'en0', 'eno', 'enp', 'ens', 'lan', 'ethernet']):
+                return 0
 
-        # Fallback 1: Try parsing 'ip addr' or 'ifconfig' outputs
-        try:
+            # Priority 1: WiFi
+            if any(x in iface_name for x in ['wlan', 'wlp', 'wifi', 'wi-fi', 'en1', 'airport']):
+                return 1
+
+            # Priority 2: Hotspot/Tethering/AP
+            if any(x in iface_name for x in ['ap', 'hotspot', 'tether', 'rndis', 'usb']):
+                return 2
+            if ip.startswith('192.168.43.') or ip.startswith('192.168.137.'):
+                return 2
+
+            # Priority 3: Mobile Data
+            if any(x in iface_name for x in ['rmnet', 'ccmni', 'wwan', 'ppp', 'mobile', 'cellular']):
+                return 3
+
+            # Priority 4: Unknown
+            return 4
+
+        def get_all_ips():
+            """Get all network interface IPs with their likely type"""
+            ip_list = []
+            system = platform.system()
+
             try:
-                output = subprocess.check_output(["ip", "addr"], stderr=subprocess.DEVNULL).decode()
-            except FileNotFoundError:
-                output = subprocess.check_output(["ifconfig"], stderr=subprocess.DEVNULL).decode()
+                if system == "Windows":
+                    # Windows: Use ipconfig parsing
+                    result = subprocess.run(['ipconfig'], capture_output=True, text=True, timeout=5)
+                    lines = result.stdout.split('\n')
+                    current_adapter = ""
 
-            # Find all IPs (ignore loopback and link-local)
-            ips = re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", output)
-            for ip in ips:
-                if not ip.startswith("127.") and not ip.startswith("169.254."):
-                    # Android hotspot often uses wlan0 or ap0 interfaces
-                    if "192.168.43." in ip or "192.168." in ip:
-                        return ip
-                    return ip
+                    for line in lines:
+                        line = line.strip()
+                        if "adapter" in line.lower():
+                            current_adapter = line.lower()
+                        elif "IPv4" in line or "IP Address" in line:
+                            parts = line.split(':')
+                            if len(parts) > 1:
+                                ip = parts[1].strip()
+                                if ip and ip != "127.0.0.1" and not ip.startswith("169.254"):
+                                    priority = classify_interface(current_adapter, ip)
+                                    ip_list.append((priority, ip, current_adapter))
+
+                elif system in ("Linux", "Android"):
+                    # Linux/Android: Parse ip addr or ifconfig
+                    try:
+                        result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, timeout=5)
+                    except FileNotFoundError:
+                        result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=5)
+
+                    lines = result.stdout.split('\n')
+                    current_iface = ""
+
+                    for line in lines:
+                        if line and not line.startswith(' '):
+                            parts = line.split(':')
+                            if len(parts) >= 2:
+                                current_iface = parts[1].strip() if parts[0].isdigit() else parts[0].strip()
+
+                        if 'inet ' in line and 'inet6' not in line:
+                            parts = line.split()
+                            for i, part in enumerate(parts):
+                                if part == 'inet' and i + 1 < len(parts):
+                                    ip = parts[i + 1].split('/')[0]
+                                    if ip != "127.0.0.1" and not ip.startswith("169.254"):
+                                        priority = classify_interface(current_iface.lower(), ip)
+                                        ip_list.append((priority, ip, current_iface))
+                                    break
+
+                elif system == "Darwin":  # macOS
+                    result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=5)
+                    lines = result.stdout.split('\n')
+                    current_iface = ""
+
+                    for line in lines:
+                        if line and not line.startswith('\t') and not line.startswith(' '):
+                            current_iface = line.split(':')[0].strip()
+                        elif 'inet ' in line and 'inet6' not in line:
+                            parts = line.split()
+                            if 'inet' in parts:
+                                idx = parts.index('inet')
+                                if idx + 1 < len(parts):
+                                    ip = parts[idx + 1]
+                                    if ip != "127.0.0.1" and not ip.startswith("169.254"):
+                                        priority = classify_interface(current_iface.lower(), ip)
+                                        ip_list.append((priority, ip, current_iface))
+
+            except Exception:
+                pass
+
+            return ip_list
+
+        # Try to get all IPs and sort by priority
+        try:
+            ip_list = get_all_ips()
+            if ip_list:
+                ip_list.sort(key=lambda x: x[0])
+                selected_ip = ip_list[0][1]
+                return selected_ip
         except Exception:
             pass
 
-        # Fallback 2: Try hostname resolution
+        # Fallback 1: UDP connection method
         try:
-            hostname = socket.gethostname()
-            ip = socket.gethostbyname(hostname)
-            if ip and not ip.startswith("127."):
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(2)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            if ip != "127.0.0.1":
                 return ip
         except Exception:
             pass
 
-        # Final fallback (no usable IP)
+        # Fallback 2: Hostname method
+        try:
+            hostname = socket.gethostname()
+            ip = socket.gethostbyname(hostname)
+            if ip and ip != "127.0.0.1":
+                return ip
+        except Exception:
+            pass
+
+        # Last resort
         return "127.0.0.1"
+
         
 
 # ============================================================================
