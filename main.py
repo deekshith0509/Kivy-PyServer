@@ -1059,6 +1059,7 @@ class MainScreen(Screen):
                 ("Music", base + "Music"),
                 ("Movies", base + "Movies"),
                 ("DCIM", base + "DCIM"),
+                ("temp😅", base + "MY"),
             ]
         else:
             home = os.path.expanduser("~")
