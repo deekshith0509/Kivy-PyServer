@@ -3,7 +3,7 @@ PyServer - Complete HTTP File Server for Android
 A fully-featured, production-ready file server with modern UI
 """
 
-import os
+import os, re, subprocess
 import sys
 import socket
 import threading
@@ -745,27 +745,40 @@ class ServerManager:
                 self.is_running = False
                 return False, error_msg
     
-    def get_local_ip(self) -> str:
-        """Get local IP address"""
+    def get_local_ip():
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(2)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
             s.close()
             return ip
-        except Exception as e:
-            logger.log(f"Failed to get local IP via UDP: {e}", "WARNING")
+        except Exception:
+            pass
+        
+        try:
             try:
-                hostname = socket.gethostname()
-                ip = socket.gethostbyname(hostname)
-                if ip and ip != "127.0.0.1":
+                output = subprocess.check_output(["ip", "addr"], stderr=subprocess.DEVNULL).decode()
+            except FileNotFoundError:
+                output = subprocess.check_output(["ifconfig"], stderr=subprocess.DEVNULL).decode()
+            
+            ips = re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", output)
+            for ip in ips:
+                if not ip.startswith("127.") and not ip.startswith("169.254."):
+                    if "192.168.43." in ip or "192.168." in ip:
+                        return ip
                     return ip
-                return "127.0.0.1"
-            except Exception as e2:
-                logger.log(f"Failed to get local IP via hostname: {e2}", "ERROR")
-                return "127.0.0.1"
+        except Exception:
+            pass
 
+        try:
+            hostname = socket.gethostname()
+            ip = socket.gethostbyname(hostname)
+            if ip and not ip.startswith("127."):
+                return ip
+        except Exception:
+            pass
+
+        return None
 
 # ============================================================================
 # MODERN UI COMPONENTS
