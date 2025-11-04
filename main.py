@@ -855,79 +855,67 @@ class ServerManager:
 
 
     def get_local_ip(self):
-        """Return the most relevant local IP (Wi-Fi, Hotspot, Data) — safe for Android and desktop."""
-
+        """Return the device's local IP with proper Android prioritization (ap0 > wlan0 > ccmni > localhost)."""
         ip = None
 
         try:
-            # ---- Primary: Wi-Fi/Data (Internet path method) ----
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))  # Google DNS — no data sent
-                ip = s.getsockname()[0]
-                s.close()
-            except Exception:
-                pass
-
-            # ---- Secondary: Parse local interfaces if no Internet ----
-            if not ip or ip.startswith("127."):
-                system = platform.system().lower()
-                output = ""
-
+            # ---- Only handle this logic if running on Android ----
+            if platform == "android":
                 try:
-                    if "windows" in system:
-                        output = subprocess.check_output(["ipconfig"], text=True, stderr=subprocess.DEVNULL)
-                    else:
-                        output = subprocess.check_output(["ifconfig"], text=True, stderr=subprocess.DEVNULL)
-                except Exception:
+                    # Run ifconfig command (toybox/busybox compatible)
+                    output = subprocess.check_output(["ifconfig"], text=True, stderr=subprocess.STDOUT)
+                except Exception as e:
+                    logger.log(f"IPResolver: ifconfig command failed — {e}")
                     output = ""
 
                 if output:
-                    # Extract all interfaces and addresses
-                    interfaces = re.findall(r"(\w+):.*?inet\s(\d+\.\d+\.\d+\.\d+)", output, re.S)
+                    try:
+                        # Extract interfaces and inet addresses (both 'inet ' and 'inet addr:')
+                        interfaces = re.findall(
+                            r"(\w+):.*?inet\s(?:addr:)?(\d+\.\d+\.\d+\.\d+)",
+                            output,
+                            re.S
+                        )
 
-                    # Interface priority: prefer Hotspot (ap0), then Wi-Fi/Data, then others
-                    priority = [r"^ap", r"^wlan", r"^eth", r"^en", r"^ccmni", r"^rmnet"]
+                        # Define priority (ap0 > wlan0 > ccmni)
+                        priority_order = ["ap0", "wlan0", "ccmni"]
 
-                    for pattern in priority:
-                        for iface, addr in interfaces:
-                            if re.match(pattern, iface) and not addr.startswith("127."):
-                                ip = addr
+                        # Check based on defined priorities
+                        for pref_iface in priority_order:
+                            for iface, addr in interfaces:
+                                if iface.startswith(pref_iface) and not addr.startswith("127."):
+                                    ip = addr
+                                    break
+                            if ip:
                                 break
-                        if ip:
-                            break
 
-                    # Fallback: first non-loopback IP if none matched priority
-                    if not ip:
-                        for _, addr in interfaces:
-                            if not addr.startswith("127."):
-                                ip = addr
-                                break
+                        # Fallback: first non-loopback IP if none of the priorities matched
+                        if not ip:
+                            for iface, addr in interfaces:
+                                if not addr.startswith("127."):
+                                    ip = addr
+                                    break
 
-            # ---- Tertiary: use `ip addr` command as backup ----
-            if not ip or ip.startswith("127."):
-                try:
-                    output = subprocess.check_output(["ip", "addr"], text=True, stderr=subprocess.DEVNULL)
-                    interfaces = re.findall(r"(\w+):.*?inet (\d+\.\d+\.\d+\.\d+)", output, re.S)
-                    for iface, addr in interfaces:
-                        if iface.startswith("ap") and not addr.startswith("127."):
-                            ip = addr
-                            break
-                    if not ip:
-                        match = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", output)
-                        if match and not match.group(1).startswith("127."):
-                            ip = match.group(1)
-                except Exception:
-                    pass
+                    except Exception as parse_err:
+                        logger.log(f"IPResolver: Parsing ifconfig output failed — {parse_err}")
 
-            # ---- Final fallback: hostname or localhost ----
-            if not ip or ip.startswith("127."):
-                try:
-                    ip = socket.gethostbyname(socket.gethostname())
-                except Exception:
+                # Final fallback — use localhost if nothing found
+                if not ip:
                     ip = "127.0.0.1"
 
-        except Exception:
+            # ---- Non-Android platforms: use default socket-based fallback ----
+            else:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    ip = s.getsockname()[0]
+                    s.close()
+                except Exception as e:
+                    logger.log(f"IPResolver: socket fallback failed — {e}")
+                    ip = "127.0.0.1"
+
+        except Exception as e:
+            logger.log(f"IPResolver: Unexpected error — {e}")
             ip = "127.0.0.1"
 
         return ip

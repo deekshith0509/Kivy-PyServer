@@ -10,3 +10,12 @@
 [22:34:20] [INFO] Server started on port 8000
 [22:34:28] [INFO] Server stopped
 [22:34:29] [INFO] Server started on port 8000
+[23:28:41] [INFO] Logger initialized successfully.
+[23:28:41] [INFO] Starting PyServer...
+[23:28:41] [INFO] PyServer v1.0.0 initialized
+[23:28:44] [INFO] Server started on port 8000
+[23:28:44] [ERROR] Fatal error: ServerManager.get_local_ip() takes 0 positional arguments but 1 was given
+[23:29:02] [INFO] Logger initialized successfully.
+[23:29:02] [INFO] Starting PyServer...
+[23:29:02] [INFO] PyServer v1.0.0 initialized
+[23:29:05] [INFO] Server started on port 8000
