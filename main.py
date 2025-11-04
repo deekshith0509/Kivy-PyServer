@@ -117,135 +117,56 @@ COLORS = {
 }
 
 
-import os
-import threading
-import datetime
-from typing import Callable
-from kivy.clock import Clock
-from kivy.app import App
-
-# You can define this constant globally or pass it to Logger
-LOG_MAX_LINES = 1000
-LOG_FILE_NAME = "app_logs.txt"
-LOG_MAX_SIZE_MB = 5  # auto-rotate after ~5MB
-
+# ============================================================================
+# THREAD-SAFE LOGGER
+# ============================================================================
 
 class Logger:
-    """Thread-safe logging system with persistent file saving and callbacks."""
-
-    def __init__(self, max_lines: int = LOG_MAX_LINES, log_file: str = None):
+    """Thread-safe logging system with callbacks"""
+    
+    def __init__(self, max_lines: int = LOG_MAX_LINES):
         self.max_lines = max_lines
         self.logs = []
         self.callbacks = []
         self._lock = threading.Lock()
-
-        # Automatically resolve a writable directory path
-        self.log_file = log_file or self._get_default_log_path()
-
-        # Ensure log directory exists
-        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
-
-        # Load previous logs (optional)
-        self._load_existing_logs()
-
-    # ---------------------------------------------------------
-    # Public API
-    # ---------------------------------------------------------
-
+    
     def log(self, message: str, level: str = "INFO"):
-        """Add a log message and write it to file."""
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        """Add a log message"""
+        timestamp = datetime.datetime.now().strftime('%H:%M:%S')
         log_entry = f"[{timestamp}] [{level}] {message}"
-
+        
         with self._lock:
-            # Add to in-memory buffer
             self.logs.append(log_entry)
             if len(self.logs) > self.max_lines:
                 self.logs.pop(0)
-
-            # Write to file
-            self._write_to_file(log_entry)
-
-            # Notify all registered callbacks safely
+            
+            # Notify all callbacks on main thread
             for callback in self.callbacks:
                 try:
                     Clock.schedule_once(lambda dt, entry=log_entry: callback(entry), 0)
                 except Exception as e:
                     print(f"Log callback error: {e}")
-
-        # Also print to console for development
-        print(log_entry)
-
+        
+        print(log_entry)  # Also print to console
+    
     def add_callback(self, callback: Callable):
-        """Register a callback for new log messages."""
+        """Register a callback for new log messages"""
         with self._lock:
             self.callbacks.append(callback)
-
+    
     def get_all_logs(self) -> str:
-        """Return all logs as a single string."""
+        """Get all logs as a single string"""
         with self._lock:
             return "\n".join(self.logs)
-
+    
     def clear(self):
-        """Clear in-memory and on-disk logs."""
+        """Clear all logs"""
         with self._lock:
             self.logs.clear()
-            try:
-                open(self.log_file, 'w').close()
-            except Exception as e:
-                print(f"Failed to clear log file: {e}")
 
-    # ---------------------------------------------------------
-    # Private Helpers
-    # ---------------------------------------------------------
 
-    def _get_default_log_path(self) -> str:
-        """
-        Returns a writable path for storing logs:
-        - On Android: internal app storage (App.user_data_dir)
-        - On Desktop: ~/.myapp/logs/app_logs.txt
-        """
-        try:
-            app = App.get_running_app()
-            base_dir = app.user_data_dir
-        except Exception:
-            # Fallback for non-Kivy contexts
-            base_dir = os.path.expanduser("~/.myapp/logs")
-
-        return os.path.join(base_dir, LOG_FILE_NAME)
-
-    def _load_existing_logs(self):
-        """Load existing logs from file (optional)."""
-        if os.path.exists(self.log_file):
-            try:
-                with open(self.log_file, 'r', encoding='utf-8') as f:
-                    self.logs = f.read().splitlines()[-self.max_lines:]
-            except Exception as e:
-                print(f"Could not load existing log file: {e}")
-
-    def _write_to_file(self, entry: str):
-        """Append log entry to file, with rotation if too large."""
-        try:
-            # Rotate if file too large
-            if os.path.exists(self.log_file):
-                size_mb = os.path.getsize(self.log_file) / (1024 * 1024)
-                if size_mb > LOG_MAX_SIZE_MB:
-                    rotated_path = self.log_file.replace(".txt", f"_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
-                    os.rename(self.log_file, rotated_path)
-
-            # Append entry
-            with open(self.log_file, 'a', encoding='utf-8') as f:
-                f.write(entry + '\n')
-
-        except Exception as e:
-            print(f"Failed to write log to file: {e}")
-
-# ---------------------------------------------------------
 # Global logger instance
-# ---------------------------------------------------------
 logger = Logger()
-
-
 
 
 # ============================================================================
