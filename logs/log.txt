@@ -2,3 +2,11 @@
 [21:11:44] [INFO] Starting PyServer...
 [21:11:44] [INFO] PyServer v1.0.0 initialized
 [21:11:47] [INFO] Server started on port 8000
+[22:34:03] [INFO] Logger initialized successfully.
+[22:34:03] [INFO] Starting PyServer...
+[22:34:03] [INFO] PyServer v1.0.0 initialized
+[22:34:09] [INFO] Server started on port 8000
+[22:34:19] [INFO] Server stopped
+[22:34:20] [INFO] Server started on port 8000
+[22:34:28] [INFO] Server stopped
+[22:34:29] [INFO] Server started on port 8000

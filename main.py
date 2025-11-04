@@ -854,7 +854,7 @@ class ServerManager:
 
 
 
-    def get_local_ip():
+    def get_local_ip(self):
         """Return the most relevant local IP (Wi-Fi, Hotspot, Data) — safe for Android and desktop."""
 
         ip = None
