@@ -853,73 +853,106 @@ class ServerManager:
 
 
 
-
     def get_local_ip(self):
-        """Return the device's local IP with proper Android prioritization (ap0 > wlan0 > ccmni > localhost)."""
+        """
+        Return the device's local IP with Android-specific prioritization
+        and verbose logging for every stage of resolution.
+        """
+
         ip = None
+        logger.log("IPResolver: Starting get_local_ip()")
 
         try:
-            # ---- Only handle this logic if running on Android ----
-            if platform == "android":
+            # ---- Platform detection ----
+            platform_name = sys.platform.lower()
+            is_android = "linux" in platform_name
+            logger.log(f"IPResolver: Detected platform = {platform_name}")
+            logger.log(f"IPResolver: Running in Android mode = {is_android}")
+
+            # ---- Android-specific logic ----
+            if is_android:
+                logger.log("IPResolver: Entering Android-specific resolution logic")
+
                 try:
-                    # Run ifconfig command (toybox/busybox compatible)
+                    # Run 'ifconfig' to get interface info
+                    logger.log("IPResolver: Executing 'ifconfig' command...")
                     output = subprocess.check_output(["ifconfig"], text=True, stderr=subprocess.STDOUT)
+                    logger.log(f"IPResolver: Raw ifconfig output:\n{output}")
                 except Exception as e:
-                    logger.log(f"IPResolver: ifconfig command failed — {e}")
+                    logger.log(f"IPResolver: 'ifconfig' command failed — {e}")
                     output = ""
 
                 if output:
                     try:
-                        # Extract interfaces and inet addresses (both 'inet ' and 'inet addr:')
-                        interfaces = re.findall(
-                            r"(\w+):.*?inet\s(?:addr:)?(\d+\.\d+\.\d+\.\d+)",
-                            output,
-                            re.S
-                        )
+                        # Match both 'ap0:' and 'ap0 Link encap' formats
+                        pattern = r"([a-zA-Z0-9_]+)(?::|\s+Link).*?inet\s(?:addr:)?\s*(\d+\.\d+\.\d+\.\d+)"
+                        logger.log(f"IPResolver: Parsing interfaces using regex pattern: {pattern}")
 
-                        # Define priority (ap0 > wlan0 > ccmni)
+                        interfaces = re.findall(pattern, output, re.S)
+                        logger.log(f"IPResolver: Parsed interfaces and IPs: {interfaces}")
+
                         priority_order = ["ap0", "wlan0", "ccmni"]
+                        logger.log(f"IPResolver: Interface priority order: {priority_order}")
 
-                        # Check based on defined priorities
+                        # Try to match according to priority
                         for pref_iface in priority_order:
+                            logger.log(f"IPResolver: Checking priority interface prefix: {pref_iface}")
                             for iface, addr in interfaces:
+                                logger.log(f"IPResolver: Evaluating interface {iface} with address {addr}")
                                 if iface.startswith(pref_iface) and not addr.startswith("127."):
                                     ip = addr
+                                    logger.log(f"IPResolver: Selected IP from {iface} based on priority match: {ip}")
                                     break
                             if ip:
                                 break
 
-                        # Fallback: first non-loopback IP if none of the priorities matched
+                        # Fallback to any non-loopback IP
                         if not ip:
+                            logger.log("IPResolver: No prioritized interface matched — searching for any non-loopback IP...")
                             for iface, addr in interfaces:
                                 if not addr.startswith("127."):
                                     ip = addr
+                                    logger.log(f"IPResolver: Selected fallback non-loopback IP from {iface}: {ip}")
                                     break
 
-                    except Exception as parse_err:
-                        logger.log(f"IPResolver: Parsing ifconfig output failed — {parse_err}")
+                        # If still nothing found
+                        if not ip:
+                            logger.log("IPResolver: No valid IP found after parsing; using localhost fallback.")
+                            ip = "127.0.0.1"
 
-                # Final fallback — use localhost if nothing found
-                if not ip:
+                    except Exception as parse_err:
+                        logger.log(f"IPResolver: Failed to parse ifconfig output — {parse_err}")
+                        ip = "127.0.0.1"
+
+                else:
+                    logger.log("IPResolver: Empty ifconfig output — using localhost as fallback.")
                     ip = "127.0.0.1"
 
-            # ---- Non-Android platforms: use default socket-based fallback ----
+            # ---- Non-Android (standard) logic ----
             else:
+                logger.log("IPResolver: Entering non-Android socket-based resolution logic")
+
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    logger.log("IPResolver: Created UDP socket")
+
                     s.connect(("8.8.8.8", 80))
                     ip = s.getsockname()[0]
+                    logger.log(f"IPResolver: Socket connected successfully; resolved local IP = {ip}")
                     s.close()
+
                 except Exception as e:
-                    logger.log(f"IPResolver: socket fallback failed — {e}")
+                    logger.log(f"IPResolver: Socket fallback failed — {e}")
                     ip = "127.0.0.1"
 
         except Exception as e:
-            logger.log(f"IPResolver: Unexpected error — {e}")
+            logger.log(f"IPResolver: Unexpected top-level error — {e}")
             ip = "127.0.0.1"
 
+        # ---- Final Result ----
+        logger.log(f"IPResolver: Final resolved IP = {ip}")
+        logger.log("IPResolver: get_local_ip() completed successfully")
         return ip
-
 
 
 
