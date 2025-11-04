@@ -1,0 +1,4 @@
+[21:11:44] [INFO] Logger initialized successfully.
+[21:11:44] [INFO] Starting PyServer...
+[21:11:44] [INFO] PyServer v1.0.0 initialized
+[21:11:47] [INFO] Server started on port 8000

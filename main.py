@@ -121,52 +121,104 @@ COLORS = {
 # THREAD-SAFE LOGGER
 # ============================================================================
 
+
+import os
+import sys
+import datetime
+import threading
+from kivy.clock import Clock
+
 class Logger:
-    """Thread-safe logging system with callbacks"""
-    
-    def __init__(self, max_lines: int = LOG_MAX_LINES):
+    """Cross-platform, thread-safe logger with Android awareness"""
+
+    def __init__(self, app_name="MyAppName", max_lines=500):
+        self.app_name = app_name
         self.max_lines = max_lines
         self.logs = []
         self.callbacks = []
         self._lock = threading.Lock()
-    
-    def log(self, message: str, level: str = "INFO"):
-        """Add a log message"""
-        timestamp = datetime.datetime.now().strftime('%H:%M:%S')
-        log_entry = f"[{timestamp}] [{level}] {message}"
-        
+
+        # Detect platform
+        self.is_android = hasattr(sys, 'getandroidapilevel')
+
+        if self.is_android:
+            # ---- Android-specific imports and setup ----
+            try:
+                from android.permissions import request_permissions, Permission
+                from android.storage import primary_external_storage_path
+
+                # Ask runtime permission
+                request_permissions([
+                    Permission.WRITE_EXTERNAL_STORAGE,
+                    Permission.READ_EXTERNAL_STORAGE
+                ])
+
+                base_path = primary_external_storage_path()  # /storage/emulated/0
+                self.log_dir = os.path.join(base_path, self.app_name)
+                os.makedirs(self.log_dir, exist_ok=True)
+
+                self.log_file_path = os.path.join(self.log_dir, "log.txt")
+
+            except Exception as e:
+                # Fallback to app internal data dir if permission denied
+                from kivy.app import App
+                self.log_dir = os.path.join(App.get_running_app().user_data_dir, "logs")
+                os.makedirs(self.log_dir, exist_ok=True)
+                self.log_file_path = os.path.join(self.log_dir, "log.txt")
+                print(f"[Logger] Android external storage failed: {e}")
+        else:
+            # ---- Desktop fallback ----
+            self.log_dir = os.path.join(os.getcwd(), "logs")
+            os.makedirs(self.log_dir, exist_ok=True)
+            self.log_file_path = os.path.join(self.log_dir, "log.txt")
+
+        # Initial message
+        self.log("Logger initialized successfully.", "INFO")
+
+    def log(self, message, level="INFO"):
+        """Record a message to memory and file"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        entry = f"[{timestamp}] [{level}] {message}"
+
         with self._lock:
-            self.logs.append(log_entry)
+            self.logs.append(entry)
             if len(self.logs) > self.max_lines:
                 self.logs.pop(0)
-            
-            # Notify all callbacks on main thread
-            for callback in self.callbacks:
+
+            try:
+                with open(self.log_file_path, "a", encoding="utf-8") as f:
+                    f.write(entry + "\n")
+            except Exception as e:
+                print(f"[Logger] Failed to write log file: {e}")
+
+            # Notify callbacks safely on the Kivy thread
+            for cb in self.callbacks:
                 try:
-                    Clock.schedule_once(lambda dt, entry=log_entry: callback(entry), 0)
+                    Clock.schedule_once(lambda dt, e=entry: cb(e), 0)
                 except Exception as e:
-                    print(f"Log callback error: {e}")
-        
-        print(log_entry)  # Also print to console
-    
-    def add_callback(self, callback: Callable):
-        """Register a callback for new log messages"""
+                    print(f"[Logger] Callback error: {e}")
+
+        print(entry)
+
+    def add_callback(self, callback):
         with self._lock:
             self.callbacks.append(callback)
-    
-    def get_all_logs(self) -> str:
-        """Get all logs as a single string"""
+
+    def get_all_logs(self):
         with self._lock:
             return "\n".join(self.logs)
-    
+
     def clear(self):
-        """Clear all logs"""
         with self._lock:
             self.logs.clear()
+            try:
+                open(self.log_file_path, "w").close()
+            except Exception:
+                pass
 
 
-# Global logger instance
-logger = Logger()
+# Global instance
+logger = Logger("ShareServer")
 
 
 # ============================================================================
