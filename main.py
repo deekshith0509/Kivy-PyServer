@@ -121,62 +121,108 @@ COLORS = {
 # THREAD-SAFE LOGGER
 # ============================================================================
 
-
 import os
 import sys
 import datetime
 import threading
 from kivy.clock import Clock
 
-class Logger:
-    """Cross-platform, thread-safe logger with Android awareness"""
 
-    def __init__(self, app_name="MyAppName", max_lines=500):
+class Logger:
+    """Cross-platform, thread-safe logger compatible with Android Scoped Storage"""
+
+    def __init__(self, app_name="PyServer", max_lines=500):
         self.app_name = app_name
         self.max_lines = max_lines
         self.logs = []
         self.callbacks = []
         self._lock = threading.Lock()
-
-        # Detect platform
-        self.is_android = hasattr(sys, 'getandroidapilevel')
+        self.is_android = hasattr(sys, "getandroidapilevel")
 
         if self.is_android:
-            # ---- Android-specific imports and setup ----
-            try:
-                from android.permissions import request_permissions, Permission
-                from android.storage import primary_external_storage_path
-
-                # Ask runtime permission
-                request_permissions([
-                    Permission.WRITE_EXTERNAL_STORAGE,
-                    Permission.READ_EXTERNAL_STORAGE
-                ])
-
-                base_path = primary_external_storage_path()  # /storage/emulated/0
-                self.log_dir = os.path.join(base_path, self.app_name)
-                os.makedirs(self.log_dir, exist_ok=True)
-
-                self.log_file_path = os.path.join(self.log_dir, "log.txt")
-
-            except Exception as e:
-                # Fallback to app internal data dir if permission denied
-                from kivy.app import App
-                self.log_dir = os.path.join(App.get_running_app().user_data_dir, "logs")
-                os.makedirs(self.log_dir, exist_ok=True)
-                self.log_file_path = os.path.join(self.log_dir, "log.txt")
-                print(f"[Logger] Android external storage failed: {e}")
+            self._setup_android_logger()
         else:
-            # ---- Desktop fallback ----
+            self._setup_desktop_logger()
+
+        self.log("Logger initialized successfully.", "INFO")
+
+    # --------------------------------------------------------
+    # Android setup
+    # --------------------------------------------------------
+    def _setup_android_logger(self):
+        try:
+            from android.permissions import request_permissions, Permission
+            from android.storage import app_storage_path, primary_external_storage_path
+            from kivy.app import App
+
+            # 1️⃣ Always request permissions asynchronously
+            request_permissions([
+                Permission.READ_EXTERNAL_STORAGE,
+                Permission.WRITE_EXTERNAL_STORAGE
+            ])
+
+            # 2️⃣ Use app-safe directory first (always permitted)
+            try:
+                base_path = app_storage_path()  # e.g. /data/user/0/com.pyserver/files
+                self.log_dir = os.path.join(base_path, "logs")
+                os.makedirs(self.log_dir, exist_ok=True)
+                self.log_file_path = os.path.join(self.log_dir, "log.txt")
+                return
+            except Exception as e:
+                print(f"[Logger] app_storage_path() failed: {e}")
+
+            # 3️⃣ Attempt external storage only *after* fallback
+            try:
+                base_path = primary_external_storage_path()  # /storage/emulated/0
+                ext_log_dir = os.path.join(
+                    base_path, "Android", "data", f"com.{self.app_name.lower()}", "files", "logs"
+                )
+                os.makedirs(ext_log_dir, exist_ok=True)
+                self.log_dir = ext_log_dir
+                self.log_file_path = os.path.join(self.log_dir, "log.txt")
+                return
+            except Exception as e:
+                print(f"[Logger] external storage failed: {e}")
+
+            # 4️⃣ Ultimate fallback: Kivy app user_data_dir
+            try:
+                app = App.get_running_app()
+                if app and app.user_data_dir:
+                    self.log_dir = os.path.join(app.user_data_dir, "logs")
+                    os.makedirs(self.log_dir, exist_ok=True)
+                    self.log_file_path = os.path.join(self.log_dir, "log.txt")
+                    return
+            except Exception as e:
+                print(f"[Logger] user_data_dir fallback failed: {e}")
+
+            # 5️⃣ Final rescue: internal cwd (should never fail)
             self.log_dir = os.path.join(os.getcwd(), "logs")
             os.makedirs(self.log_dir, exist_ok=True)
             self.log_file_path = os.path.join(self.log_dir, "log.txt")
 
-        # Initial message
-        self.log("Logger initialized successfully.", "INFO")
+        except Exception as e:
+            # Handle import failures (non-Android builds)
+            print(f"[Logger] Android setup failed: {e}")
+            self._setup_desktop_logger()
 
+    # --------------------------------------------------------
+    # Desktop (Linux/Windows/macOS)
+    # --------------------------------------------------------
+    def _setup_desktop_logger(self):
+        try:
+            self.log_dir = os.path.join(os.getcwd(), "logs")
+            os.makedirs(self.log_dir, exist_ok=True)
+            self.log_file_path = os.path.join(self.log_dir, "log.txt")
+        except Exception as e:
+            print(f"[Logger] Failed to create desktop log dir: {e}")
+            self.log_dir = os.getcwd()
+            self.log_file_path = os.path.join(self.log_dir, "log.txt")
+
+    # --------------------------------------------------------
+    # Logging mechanism
+    # --------------------------------------------------------
     def log(self, message, level="INFO"):
-        """Record a message to memory and file"""
+        """Record a message to memory and file, thread-safe"""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         entry = f"[{timestamp}] [{level}] {message}"
 
@@ -191,7 +237,7 @@ class Logger:
             except Exception as e:
                 print(f"[Logger] Failed to write log file: {e}")
 
-            # Notify callbacks safely on the Kivy thread
+            # Schedule callback safely on Kivy’s main thread
             for cb in self.callbacks:
                 try:
                     Clock.schedule_once(lambda dt, e=entry: cb(e), 0)
@@ -200,15 +246,19 @@ class Logger:
 
         print(entry)
 
+    # --------------------------------------------------------
     def add_callback(self, callback):
+        """Register a UI callback (real-time log streaming to widgets)"""
         with self._lock:
             self.callbacks.append(callback)
 
     def get_all_logs(self):
+        """Return all logs as text"""
         with self._lock:
             return "\n".join(self.logs)
 
     def clear(self):
+        """Clear log buffer and file"""
         with self._lock:
             self.logs.clear()
             try:
@@ -217,8 +267,10 @@ class Logger:
                 pass
 
 
-# Global instance
-logger = Logger("ShareServer")
+# --------------------------------------------------------
+# Global instance (singleton)
+# --------------------------------------------------------
+logger = Logger(app_name="PyServer")
 
 
 # ============================================================================
@@ -799,66 +851,76 @@ class ServerManager:
                 return False, error_msg
 
 
-    def get_local_ip(self):
-        """Safely get the most relevant local IP (LAN/Wi-Fi/Hotspot/Mobile Data), never crash."""
+
+
+
+    def get_local_ip():
+        """Return the most relevant local IP (Wi-Fi, Hotspot, Data) — safe for Android and desktop."""
+
         ip = None
+
         try:
-            # Fast method — works on Wi-Fi/Data with Internet
+            # ---- Primary: Wi-Fi/Data (Internet path method) ----
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
+                s.connect(("8.8.8.8", 80))  # Google DNS — no data sent
                 ip = s.getsockname()[0]
                 s.close()
             except Exception:
                 pass
 
-            # If failed or loopback, use OS-specific methods
+            # ---- Secondary: Parse local interfaces if no Internet ----
             if not ip or ip.startswith("127."):
                 system = platform.system().lower()
-                if "windows" in system:
-                    try:
+                output = ""
+
+                try:
+                    if "windows" in system:
                         output = subprocess.check_output(["ipconfig"], text=True, stderr=subprocess.DEVNULL)
-                        for line in output.splitlines():
-                            if "IPv4" in line and "127." not in line:
-                                ip = line.split(":")[-1].strip()
-                                break
-                    except Exception:
-                        pass
-                else:
-                    try:
+                    else:
                         output = subprocess.check_output(["ifconfig"], text=True, stderr=subprocess.DEVNULL)
-                        interfaces = re.findall(r"(\w+):.*?inet\s(\d+\.\d+\.\d+\.\d+)", output, re.S)
-                        priority = [r"^eth", r"^wlan", r"^ap", r"^ccmni", r"^rmnet"]
+                except Exception:
+                    output = ""
 
-                        # Try matching priority interfaces
-                        for p in priority:
-                            for iface, addr in interfaces:
-                                if re.match(p, iface) and not addr.startswith("127."):
-                                    ip = addr
-                                    break
-                            if ip:
+                if output:
+                    # Extract all interfaces and addresses
+                    interfaces = re.findall(r"(\w+):.*?inet\s(\d+\.\d+\.\d+\.\d+)", output, re.S)
+
+                    # Interface priority: prefer Hotspot (ap0), then Wi-Fi/Data, then others
+                    priority = [r"^ap", r"^wlan", r"^eth", r"^en", r"^ccmni", r"^rmnet"]
+
+                    for pattern in priority:
+                        for iface, addr in interfaces:
+                            if re.match(pattern, iface) and not addr.startswith("127."):
+                                ip = addr
+                                break
+                        if ip:
+                            break
+
+                    # Fallback: first non-loopback IP if none matched priority
+                    if not ip:
+                        for _, addr in interfaces:
+                            if not addr.startswith("127."):
+                                ip = addr
                                 break
 
-                        # Otherwise pick first non-loopback IP
-                        if not ip:
-                            for _, addr in interfaces:
-                                if not addr.startswith("127."):
-                                    ip = addr
-                                    break
-                    except Exception:
-                        pass
-
-            # Extra fallback using `ip addr`
-            if (not ip or ip.startswith("127.")):
+            # ---- Tertiary: use `ip addr` command as backup ----
+            if not ip or ip.startswith("127."):
                 try:
                     output = subprocess.check_output(["ip", "addr"], text=True, stderr=subprocess.DEVNULL)
-                    match = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", output)
-                    if match and not match.group(1).startswith("127."):
-                        ip = match.group(1)
+                    interfaces = re.findall(r"(\w+):.*?inet (\d+\.\d+\.\d+\.\d+)", output, re.S)
+                    for iface, addr in interfaces:
+                        if iface.startswith("ap") and not addr.startswith("127."):
+                            ip = addr
+                            break
+                    if not ip:
+                        match = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", output)
+                        if match and not match.group(1).startswith("127."):
+                            ip = match.group(1)
                 except Exception:
                     pass
 
-            # Final fallback — hostname or localhost
+            # ---- Final fallback: hostname or localhost ----
             if not ip or ip.startswith("127."):
                 try:
                     ip = socket.gethostbyname(socket.gethostname())
@@ -869,6 +931,7 @@ class ServerManager:
             ip = "127.0.0.1"
 
         return ip
+
 
 
 
