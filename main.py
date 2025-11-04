@@ -117,56 +117,135 @@ COLORS = {
 }
 
 
-# ============================================================================
-# THREAD-SAFE LOGGER
-# ============================================================================
+import os
+import threading
+import datetime
+from typing import Callable
+from kivy.clock import Clock
+from kivy.app import App
+
+# You can define this constant globally or pass it to Logger
+LOG_MAX_LINES = 1000
+LOG_FILE_NAME = "app_logs.txt"
+LOG_MAX_SIZE_MB = 5  # auto-rotate after ~5MB
+
 
 class Logger:
-    """Thread-safe logging system with callbacks"""
-    
-    def __init__(self, max_lines: int = LOG_MAX_LINES):
+    """Thread-safe logging system with persistent file saving and callbacks."""
+
+    def __init__(self, max_lines: int = LOG_MAX_LINES, log_file: str = None):
         self.max_lines = max_lines
         self.logs = []
         self.callbacks = []
         self._lock = threading.Lock()
-    
+
+        # Automatically resolve a writable directory path
+        self.log_file = log_file or self._get_default_log_path()
+
+        # Ensure log directory exists
+        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
+
+        # Load previous logs (optional)
+        self._load_existing_logs()
+
+    # ---------------------------------------------------------
+    # Public API
+    # ---------------------------------------------------------
+
     def log(self, message: str, level: str = "INFO"):
-        """Add a log message"""
-        timestamp = datetime.datetime.now().strftime('%H:%M:%S')
+        """Add a log message and write it to file."""
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"[{timestamp}] [{level}] {message}"
-        
+
         with self._lock:
+            # Add to in-memory buffer
             self.logs.append(log_entry)
             if len(self.logs) > self.max_lines:
                 self.logs.pop(0)
-            
-            # Notify all callbacks on main thread
+
+            # Write to file
+            self._write_to_file(log_entry)
+
+            # Notify all registered callbacks safely
             for callback in self.callbacks:
                 try:
                     Clock.schedule_once(lambda dt, entry=log_entry: callback(entry), 0)
                 except Exception as e:
                     print(f"Log callback error: {e}")
-        
-        print(log_entry)  # Also print to console
-    
+
+        # Also print to console for development
+        print(log_entry)
+
     def add_callback(self, callback: Callable):
-        """Register a callback for new log messages"""
+        """Register a callback for new log messages."""
         with self._lock:
             self.callbacks.append(callback)
-    
+
     def get_all_logs(self) -> str:
-        """Get all logs as a single string"""
+        """Return all logs as a single string."""
         with self._lock:
             return "\n".join(self.logs)
-    
+
     def clear(self):
-        """Clear all logs"""
+        """Clear in-memory and on-disk logs."""
         with self._lock:
             self.logs.clear()
+            try:
+                open(self.log_file, 'w').close()
+            except Exception as e:
+                print(f"Failed to clear log file: {e}")
 
+    # ---------------------------------------------------------
+    # Private Helpers
+    # ---------------------------------------------------------
 
+    def _get_default_log_path(self) -> str:
+        """
+        Returns a writable path for storing logs:
+        - On Android: internal app storage (App.user_data_dir)
+        - On Desktop: ~/.myapp/logs/app_logs.txt
+        """
+        try:
+            app = App.get_running_app()
+            base_dir = app.user_data_dir
+        except Exception:
+            # Fallback for non-Kivy contexts
+            base_dir = os.path.expanduser("~/.myapp/logs")
+
+        return os.path.join(base_dir, LOG_FILE_NAME)
+
+    def _load_existing_logs(self):
+        """Load existing logs from file (optional)."""
+        if os.path.exists(self.log_file):
+            try:
+                with open(self.log_file, 'r', encoding='utf-8') as f:
+                    self.logs = f.read().splitlines()[-self.max_lines:]
+            except Exception as e:
+                print(f"Could not load existing log file: {e}")
+
+    def _write_to_file(self, entry: str):
+        """Append log entry to file, with rotation if too large."""
+        try:
+            # Rotate if file too large
+            if os.path.exists(self.log_file):
+                size_mb = os.path.getsize(self.log_file) / (1024 * 1024)
+                if size_mb > LOG_MAX_SIZE_MB:
+                    rotated_path = self.log_file.replace(".txt", f"_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+                    os.rename(self.log_file, rotated_path)
+
+            # Append entry
+            with open(self.log_file, 'a', encoding='utf-8') as f:
+                f.write(entry + '\n')
+
+        except Exception as e:
+            print(f"Failed to write log to file: {e}")
+
+# ---------------------------------------------------------
 # Global logger instance
+# ---------------------------------------------------------
 logger = Logger()
+
+
 
 
 # ============================================================================
@@ -745,99 +824,80 @@ class ServerManager:
                 logger.log(error_msg, "ERROR")
                 self.is_running = False
                 return False, error_msg
+
+
     def get_local_ip(self):
-        """Get the most relevant local IP (LAN/Wi-Fi/Hotspot/Mobile Data)."""
+        """Safely get the most relevant local IP (LAN/Wi-Fi/Hotspot/Mobile Data), never crash."""
         ip = None
-        system = platform.system()
-
-        def parse_ifconfig_output(output):
-            """Extracts IPs from ifconfig output."""
-            interfaces = {}
-            current_iface = None
-            for line in output.splitlines():
-                if not line.strip():
-                    continue
-                if not line.startswith(" "):
-                    current_iface = line.split(":")[0]
-                    interfaces[current_iface] = None
-                if 'inet ' in line and '127.0.0.1' not in line:
-                    parts = line.split()
-                    try:
-                        inet_index = parts.index('inet')
-                        ip_addr = parts[inet_index + 1]
-                        interfaces[current_iface] = ip_addr
-                    except Exception:
-                        continue
-            return interfaces
-
         try:
-            # First, try UDP socket method (works for Wi-Fi/Data with internet)
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-        except Exception:
-            pass
-
-        if not ip or ip.startswith("127."):
+            # Fast method — works on Wi-Fi/Data with Internet
             try:
-                if system == "Windows":
-                    output = subprocess.check_output(["ipconfig"], text=True)
-                    for line in output.splitlines():
-                        if "IPv4 Address" in line and "127.0.0.1" not in line:
-                            ip = line.split(":")[-1].strip()
-                            break
-                else:
-                    # Linux / Android-like environment
-                    output = subprocess.check_output(["ifconfig"], text=True)
-                    interfaces = parse_ifconfig_output(output)
-
-                    # Prioritize: LAN > WiFi > Hotspot > Mobile > others
-                    priority_order = [
-                        r"^eth",       # Ethernet / LAN
-                        r"^wlan",      # Wi-Fi
-                        r"^ap",        # Hotspot interface (Android)
-                        r"^ccmni",     # Mobile data (Android)
-                        r"^rmnet",     # Mobile data (Qualcomm)
-                    ]
-
-                    for pattern in priority_order:
-                        for iface, addr in interfaces.items():
-                            if re.match(pattern, iface) and addr:
-                                ip = addr
-                                break
-                        if ip:
-                            break
-
-                    # If still no match, pick first available non-loopback IP
-                    if not ip:
-                        for iface, addr in interfaces.items():
-                            if addr:
-                                ip = addr
-                                break
-
-                    # Extra fallback using `ip addr`
-                    if not ip:
-                        output = subprocess.check_output(["ip", "addr"], text=True)
-                        for line in output.splitlines():
-                            if 'inet ' in line and '127.0.0.1' not in line:
-                                ip = line.split()[1].split('/')[0]
-                                break
-
-            except Exception as e:
-                self.log_message(f"Error fetching local IP: {e}")
-
-        # Final fallback — hostname-based IP
-        if not ip or ip.startswith("127."):
-            try:
-                ip = socket.gethostbyname(socket.gethostname())
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+                s.close()
             except Exception:
-                ip = "127.0.0.1"
+                pass
+
+            # If failed or loopback, use OS-specific methods
+            if not ip or ip.startswith("127."):
+                system = platform.system().lower()
+                if "windows" in system:
+                    try:
+                        output = subprocess.check_output(["ipconfig"], text=True, stderr=subprocess.DEVNULL)
+                        for line in output.splitlines():
+                            if "IPv4" in line and "127." not in line:
+                                ip = line.split(":")[-1].strip()
+                                break
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        output = subprocess.check_output(["ifconfig"], text=True, stderr=subprocess.DEVNULL)
+                        interfaces = re.findall(r"(\w+):.*?inet\s(\d+\.\d+\.\d+\.\d+)", output, re.S)
+                        priority = [r"^eth", r"^wlan", r"^ap", r"^ccmni", r"^rmnet"]
+
+                        # Try matching priority interfaces
+                        for p in priority:
+                            for iface, addr in interfaces:
+                                if re.match(p, iface) and not addr.startswith("127."):
+                                    ip = addr
+                                    break
+                            if ip:
+                                break
+
+                        # Otherwise pick first non-loopback IP
+                        if not ip:
+                            for _, addr in interfaces:
+                                if not addr.startswith("127."):
+                                    ip = addr
+                                    break
+                    except Exception:
+                        pass
+
+            # Extra fallback using `ip addr`
+            if (not ip or ip.startswith("127.")):
+                try:
+                    output = subprocess.check_output(["ip", "addr"], text=True, stderr=subprocess.DEVNULL)
+                    match = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", output)
+                    if match and not match.group(1).startswith("127."):
+                        ip = match.group(1)
+                except Exception:
+                    pass
+
+            # Final fallback — hostname or localhost
+            if not ip or ip.startswith("127."):
+                try:
+                    ip = socket.gethostbyname(socket.gethostname())
+                except Exception:
+                    ip = "127.0.0.1"
+
+        except Exception:
+            ip = "127.0.0.1"
 
         return ip
 
 
-        
 
 # ============================================================================
 # MODERN UI COMPONENTS
@@ -1882,4 +1942,4 @@ if __name__ == '__main__':
         logger.log(f"Fatal error: {e}", "ERROR")
         import traceback
         traceback.print_exc()
-        raiseraise
+        raise
