@@ -21,7 +21,7 @@ version = 0.1
 # (list) Application requirements
 # CRITICAL: Added hostpython3 and fixed order
 
-requirements = python3==3.10.0,hostpython3==3.10.0,kivy,kivymd==1.1.1,pillow,qrcode,plyer,materialyoucolor,exceptiongroup,asyncgui,asynckivy,urllib3,requests,pyjnius,setuptools,android
+requirements = python3==3.10.0,hostpython3==3.10.0,kivy,kivymd==1.1.1,pillow,qrcode,plyer,materialyoucolor,exceptiongroup,asyncgui,asynckivy,urllib3,requests,pyjnius,setuptools,android,psutil
 
 android.permissions = MANAGE_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO,READ_MEDIA_AUDIO,POST_NOTIFICATIONS,FOREGROUND_SERVICE,WAKE_LOCK
 
@@ -102,3 +102,4 @@ warn_on_deprecated_flags = True
 
 # (bool) Display warnings when building with NDK API 21+
 warn_on_ndk_api_21 = False
+
