@@ -850,66 +850,133 @@ class ServerManager:
                 return False, error_msg
 
 
-
-
     def get_android_ip(self):
         """
-        Uses Android ConnectivityManager to get the device's active network IP,
-        including hotspot / tethering IPs that are invisible to /proc/net/dev.
+        Robust Android-only method.
+        Detects hotspot/tethering IP (ap0), Wi-Fi IP (wlan0), USB (rndis0), or mobile data IP.
+        Falls back to 127.0.0.1 only if all fail.
+        Includes verbose logging for full visibility.
         """
         try:
-            Context = autoclass('android.content.Context')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            activity = PythonActivity.mActivity
+            logger.log("[get_android_ip] Starting Android IP detection...")
 
-            ConnectivityManager = autoclass('android.net.ConnectivityManager')
-            LinkProperties = autoclass('android.net.LinkProperties')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            NetworkInterface = autoclass('java.net.NetworkInterface')
             InetAddress = autoclass('java.net.InetAddress')
 
-            conn_service = activity.getSystemService(Context.CONNECTIVITY_SERVICE)
-            active_network = conn_service.getActiveNetwork()
-            if active_network is None:
+            interfaces = NetworkInterface.getNetworkInterfaces()
+
+            if interfaces is None:
+                logger.log("[get_android_ip] No network interfaces found.")
                 return "127.0.0.1"
 
-            link_props = conn_service.getLinkProperties(active_network)
-            if link_props is None:
-                return "127.0.0.1"
+            # Enumerate all interfaces
+            while interfaces.hasMoreElements():
+                iface = interfaces.nextElement()
+                name = iface.getName().lower()
+                logger.log(f"[get_android_ip] Found interface: {name}")
 
-            addresses = link_props.getLinkAddresses().toArray()
-            for addr in addresses:
-                ip_str = addr.getAddress().getHostAddress()
-                if not ip_str.startswith("127.") and ":" not in ip_str:  # IPv4 only
-                    return ip_str
+                # Skip loopback and down interfaces
+                try:
+                    if iface.isLoopback():
+                        logger.log(f"[get_android_ip] Skipping {name} (loopback).")
+                        continue
+                    if not iface.isUp():
+                        logger.log(f"[get_android_ip] Skipping {name} (interface down).")
+                        continue
+                except Exception as e:
+                    logger.log(f"[get_android_ip] Could not check state for {name}: {e}")
+                    continue
+
+                # Focus on meaningful Android network interfaces
+                if any(k in name for k in ["ap", "rndis", "usb", "wlan", "eth", "en", "rmnet"]):
+                    logger.log(f"[get_android_ip] Checking addresses for interface: {name}")
+                    try:
+                        addrs = iface.getInetAddresses()
+                        while addrs.hasMoreElements():
+                            addr = addrs.nextElement()
+                            ip_str = addr.getHostAddress()
+                            logger.log(f"[get_android_ip] -> Found address: {ip_str}")
+
+                            # Skip IPv6 and loopback
+                            if ip_str.startswith("127."):
+                                logger.log(f"[get_android_ip] Skipping {ip_str} (loopback).")
+                                continue
+                            if ":" in ip_str:
+                                logger.log(f"[get_android_ip] Skipping {ip_str} (IPv6).")
+                                continue
+
+                            logger.log(f"[get_android_ip] ✅ Selected IP {ip_str} from {name}")
+                            return ip_str
+                    except Exception as e:
+                        logger.log(f"[get_android_ip] Error reading addresses for {name}: {e}")
+                else:
+                    logger.log(f"[get_android_ip] Ignoring unrelated interface: {name}")
+
+            logger.log("[get_android_ip] No valid IPv4 addresses found, returning 127.0.0.1")
             return "127.0.0.1"
 
         except Exception as e:
-            print("Error fetching Android IP:", e)
+            logger.log(f"[get_android_ip] Exception: {e}")
             return "127.0.0.1"
 
     def get_local_ip(self):
         """
-        Attempts to fetch Android IP first; if unavailable,
-        falls back to standard socket method.
+        Universal method — prefers Android detection, then falls back to a UDP socket trick.
+        Verbose logging included for each step.
         """
-        if not autoclass:
-            print("PyJNIus not available — skipping Android IP detection.")
-            return "127.0.0.1"
-        try:
+        logger.log("[get_local_ip] Starting local IP resolution...")
+
+        if ANDROID:
+            logger.log("[get_local_ip] Platform detected: ANDROID (using get_android_ip).")
             ip = self.get_android_ip()
             if ip and ip != "127.0.0.1":
+                logger.log(f"[get_local_ip] ✅ Android IP resolved successfully: {ip}")
                 return ip
-        except Exception:
-            pass  # fallback to socket version
+            else:
+                logger.log("[get_local_ip] Android IP detection failed or returned localhost.")
+        else:
+            logger.log("[get_local_ip] Not running on Android (using socket fallback).")
 
-        # fallback for non-Android / restricted contexts
+        # Fallback using socket UDP trick (works on most non-Android platforms)
         try:
+            logger.log("[get_local_ip] Attempting socket-based fallback...")
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
             s.close()
+            logger.log(f"[get_local_ip] ✅ Socket fallback IP resolved: {ip}")
             return ip
-        except Exception:
+        except Exception as e:
+            logger.log(f"[get_local_ip] Socket fallback failed: {e}")
             return "127.0.0.1"
+
+    def debug_interfaces(self):
+        """
+        Optional helper: Print all network interfaces and their addresses for debugging.
+        """
+        try:
+            logger.log("[debug_interfaces] Enumerating all interfaces for diagnostic purposes...")
+            NetworkInterface = autoclass('java.net.NetworkInterface')
+            interfaces = NetworkInterface.getNetworkInterfaces()
+
+            if interfaces is None:
+                logger.log("[debug_interfaces] No interfaces found!")
+                return
+
+            while interfaces.hasMoreElements():
+                iface = interfaces.nextElement()
+                name = iface.getName()
+                logger.log(f"[debug_interfaces] Interface: {name}")
+                addrs = iface.getInetAddresses()
+                while addrs.hasMoreElements():
+                    addr = addrs.nextElement()
+                    logger.log(f"[debug_interfaces]  → Address: {addr.getHostAddress()}")
+
+        except Exception as e:
+            logger.log(f"[debug_interfaces] Error while listing interfaces: {e}")
+
+
 
 
 # ============================================================================
