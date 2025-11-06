@@ -71,7 +71,7 @@ if kivy_platform == 'android':
         from android.permissions import request_permissions, check_permission, Permission
         from android.storage import primary_external_storage_path
         from jnius import autoclass, cast
-
+        ANDROID = True
         Build = autoclass('android.os.Build')
         BuildVersion = autoclass('android.os.Build$VERSION')  # ✅ FIXED: Renamed to avoid conflict
         Environment = autoclass('android.os.Environment')
