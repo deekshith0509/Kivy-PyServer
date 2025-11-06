@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Optional, Callable
 import time
 import platform
-import psutil
 # HTTP Server imports
 import http.server
 import socketserver
@@ -850,57 +849,67 @@ class ServerManager:
                 self.is_running = False
                 return False, error_msg
 
+
+
+
+    def get_android_ip(self):
+        """
+        Uses Android ConnectivityManager to get the device's active network IP,
+        including hotspot / tethering IPs that are invisible to /proc/net/dev.
+        """
+        try:
+            Context = autoclass('android.content.Context')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            activity = PythonActivity.mActivity
+
+            ConnectivityManager = autoclass('android.net.ConnectivityManager')
+            LinkProperties = autoclass('android.net.LinkProperties')
+            InetAddress = autoclass('java.net.InetAddress')
+
+            conn_service = activity.getSystemService(Context.CONNECTIVITY_SERVICE)
+            active_network = conn_service.getActiveNetwork()
+            if active_network is None:
+                return "127.0.0.1"
+
+            link_props = conn_service.getLinkProperties(active_network)
+            if link_props is None:
+                return "127.0.0.1"
+
+            addresses = link_props.getLinkAddresses().toArray()
+            for addr in addresses:
+                ip_str = addr.getAddress().getHostAddress()
+                if not ip_str.startswith("127.") and ":" not in ip_str:  # IPv4 only
+                    return ip_str
+            return "127.0.0.1"
+
+        except Exception as e:
+            print("Error fetching Android IP:", e)
+            return "127.0.0.1"
+
     def get_local_ip(self):
         """
-        Cross-platform local IP resolver for Android and others.
-        Prioritizes hotspot > WiFi > mobile data > localhost.
-        Works in sandbox (no subprocess or binaries).
+        Attempts to fetch Android IP first; if unavailable,
+        falls back to standard socket method.
         """
-
-        ip = None
+        if not autoclass:
+            print("PyJNIus not available — skipping Android IP detection.")
+            return "127.0.0.1"
         try:
-            # Step 1: Get all network interface addresses
-            interfaces = psutil.net_if_addrs()
-            preferred_order = ["ap0", "rndis", "wlan0", "eth0", "rmnet", "ccmni"]
-
-            # Step 2: Build mapping {iface: IP}
-            iface_ips = {}
-            for iface, addrs in interfaces.items():
-                for addr in addrs:
-                    if addr.family == socket.AF_INET and not addr.address.startswith("127."):
-                        iface_ips[iface] = addr.address
-
-            # Step 3: Apply prioritization
-            for pref in preferred_order:
-                for iface, addr in iface_ips.items():
-                    if pref in iface:
-                        ip = addr
-                        break
-                if ip:
-                    break
-
-            # Step 4: If nothing matched, fallback to any non-loopback
-            if not ip and iface_ips:
-                ip = next(iter(iface_ips.values()))
-
-            # Step 5: Last fallback (socket trick)
-            if not ip:
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s.connect(("8.8.8.8", 80))
-                    ip = s.getsockname()[0]
-                    s.close()
-                except:
-                    ip = "127.0.0.1"
-
+            ip = self.get_android_ip()
+            if ip and ip != "127.0.0.1":
+                return ip
         except Exception:
-            ip = "127.0.0.1"
+            pass  # fallback to socket version
 
-        return ip
-
-
-
-
+        # fallback for non-Android / restricted contexts
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
 
 
 # ============================================================================
