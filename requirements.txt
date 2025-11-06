@@ -1,4 +1,7 @@
-kivy>=2.3.0
-kivymd>=1.2.0
-Pillow>=10.0.0
-qrcode[pil]>=7.4.2
+# Core GUI Frameworks
+kivy==2.3.1
+kivymd==1.2.0
+
+# QR Code and Image Processing
+qrcode==8.2
+pillow==11.3.0

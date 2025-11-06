@@ -1134,55 +1134,56 @@ class MainScreen(Screen):
     def build_ui(self):
         """Build modern UI"""
         layout = BoxLayout(orientation='vertical')
-        
-        # Modern gradient toolbar
+
+        # Modern top app bar (reduced height & elevation for a cleaner look)
         toolbar = MDTopAppBar(
             title="PyServer",
             md_bg_color=get_color_from_hex(COLORS['primary']),
             specific_text_color=get_color_from_hex('#FFFFFF'),
-            elevation=0,
+            elevation=1,
             right_action_items=[
                 ["information-outline", lambda x: self.show_about()],
                 ["cog-outline", lambda x: self.show_settings()]
             ]
         )
         layout.add_widget(toolbar)
-        
-        # Scrollable content
-        scroll = ScrollView(do_scroll_x=False)
+
+        # Slight top margin shrink (for more visible content)
+        scroll = ScrollView(do_scroll_x=False, size_hint=(1, 1))
+
+        # Slightly tighter layout: padding reduced, spacing reduced
         content = BoxLayout(
             orientation='vertical',
-            padding=dp(20),
-            spacing=dp(20),
+            padding=[dp(15), dp(10), dp(15), dp(20)],  # top padding ↓ from 20 → 10
+            spacing=dp(15),                            # spacing ↓ from 20 → 15
             size_hint_y=None
         )
         content.bind(minimum_height=content.setter('height'))
-        
-        # Status card with animation
-        self.status_card = StatusCard(size_hint_y=None, height=dp(180))
+
+        # =============== STATUS CARD =====================
+        self.status_card = StatusCard(size_hint_y=None, height=dp(160))
         content.add_widget(self.status_card)
-        
-        # Directory card
+
+        # =============== DIRECTORY CARD ==================
         dir_card = MDCard(
             orientation='vertical',
-            padding=dp(20),
-            spacing=dp(15),
+            padding=dp(18),
+            spacing=dp(10),
             size_hint_y=None,
-            height=dp(200),
+            height=dp(190),
             elevation=3,
             radius=[dp(16)]
         )
-        
+
         dir_label = MDLabel(
             text="Server Directory",
             font_style="H6",
             theme_text_color="Primary"
         )
         dir_card.add_widget(dir_label)
-        
-        # Pre-fill directory
+
         default_path = DEFAULT_ANDROID_PATH if kivy_platform == 'android' else os.path.expanduser("~")
-        
+
         self.directory_input = MDTextField(
             text=default_path,
             hint_text="Enter directory path",
@@ -1193,104 +1194,96 @@ class MainScreen(Screen):
             height=dp(56)
         )
         dir_card.add_widget(self.directory_input)
-        
+
         from kivy.uix.widget import Widget
-        dir_card.add_widget(Widget(size_hint_y=None, height=dp(3)))
-        
-        # Browse button
+        dir_card.add_widget(Widget(size_hint_y=None, height=dp(2)))
+
         browse_btn = MDRaisedButton(
             text="Browse Common Folders",
             md_bg_color=(0, 0.8, 0.4, 1),
             text_color=(1, 1, 1, 1),
             on_release=self.show_folder_picker,
             size_hint_y=None,
-            height=dp(48)
+            height=dp(46)
         )
         dir_card.add_widget(browse_btn)
-        
+
         content.add_widget(dir_card)
-        
-        # QR Code card
+
+        # =============== QR CODE CARD ==================
         qr_card = MDCard(
             orientation='vertical',
-            padding=dp(20),
-            spacing=dp(10),
+            padding=dp(18),
+            spacing=dp(8),
             size_hint_y=None,
-            height=dp(320),
+            height=dp(300),
             elevation=3,
             radius=[dp(16)]
         )
 
-        # Container inside card
         qr_container = BoxLayout(
             orientation='vertical',
-            padding=[0, dp(10), 0, dp(10)],
-            spacing=dp(10)
+            padding=[dp(8), dp(5), 0, dp(10)],
+            spacing=dp(8)
         )
 
-        # Label (top)
         qr_label = MDLabel(
             text="Scan to Connect",
             font_style="H6",
             theme_text_color="Primary",
             halign="center",
             size_hint_y=None,
-            height=dp(30)
+            height=dp(28)
         )
 
-        # QR Image (middle)
         self.qr_image = Image(
             size_hint=(None, None),
-            size=(dp(210), dp(210)),
+            size=(dp(215), dp(215)),
             pos_hint={'center_x': 0.5}
         )
 
-        # Hint Label (bottom)
         self.qr_hint = MDLabel(
             text="QR code will appear when server starts",
             theme_text_color="Hint",
             halign="center",
             font_style="Caption",
             size_hint_y=None,
-            height=dp(20)
+            height=dp(18)
         )
 
-        # Add in correct order
         qr_container.add_widget(qr_label)
         qr_container.add_widget(self.qr_image)
         qr_container.add_widget(self.qr_hint)
 
         qr_card.add_widget(qr_container)
         content.add_widget(qr_card)
-        
-        # Action buttons
+
+        # =============== ACTION BUTTONS CARD ==================
         actions_card = MDCard(
             orientation='vertical',
-            padding=dp(20),
-            spacing=dp(15),
+            padding=dp(18),
+            spacing=dp(12),
             size_hint_y=None,
-            height=dp(180),
+            height=dp(160),
             elevation=3,
             radius=[dp(16)]
         )
-        
-        # Main toggle button with icon
+
         self.btn_toggle = MDRaisedButton(
             text="START SERVER",
             icon="play-circle",
-            font_size=sp(18),
+            font_size=sp(17),
             size_hint=(1, None),
-            height=dp(56),
+            height=dp(54),
             elevation=4,
             md_bg_color=get_color_from_hex(COLORS['success']),
             pos_hint={'center_x': 0.5}
         )
         self.btn_toggle.bind(on_press=self.toggle_server)
         actions_card.add_widget(self.btn_toggle)
-        
-        # Secondary action buttons
-        btn_row = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(48))
-        
+
+        btn_row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(46))
+
         btn_logs = MDRaisedButton(
             text="VIEW LOGS",
             icon="file-document-outline",
@@ -1300,7 +1293,7 @@ class MainScreen(Screen):
         )
         btn_logs.bind(on_press=lambda x: setattr(self.manager, 'current', 'logs'))
         btn_row.add_widget(btn_logs)
-        
+
         self.btn_browser = MDRaisedButton(
             text="OPEN BROWSER",
             icon="web",
@@ -1311,16 +1304,60 @@ class MainScreen(Screen):
         )
         self.btn_browser.bind(on_press=self.open_browser)
         btn_row.add_widget(self.btn_browser)
-        
+
         actions_card.add_widget(btn_row)
         content.add_widget(actions_card)
-        
-        # Add some bottom padding
-        content.add_widget(BoxLayout(size_hint_y=None, height=dp(20)))
-        
+
+        # =============== FOREGROUND NOTICE CARD ==================
+        notice_card = MDCard(
+            orientation='horizontal',
+            padding=dp(15),
+            spacing=dp(10),
+            size_hint_y=None,
+            height=dp(60),
+            elevation=2,
+            radius=[dp(16)],
+            md_bg_color=get_color_from_hex("#FFF8E1")  # Soft yellow
+        )
+
+        from kivymd.uix.boxlayout import MDBoxLayout
+        from kivymd.uix.label import MDIcon
+        notice_row = MDBoxLayout(orientation='horizontal', spacing=dp(10), adaptive_height=True)
+
+        warning_icon = MDIcon(
+            icon="alert-circle-outline",
+            theme_text_color="Custom",
+            text_color=get_color_from_hex("#F57C00"),
+            size_hint=(None, None),
+            size=(dp(32), dp(32))
+        )
+
+        warning_text = MDLabel(
+            text=(
+                "[b]Important:[/b] Keep PyServer open in the foreground or "
+                "in a floating window while sharing files. "
+                "If minimized or backgrounded, the server will pause."
+            ),
+            markup=True,
+            theme_text_color="Primary",
+            font_style="Body2",
+            text_size=(dp(260), None),
+            halign="left",
+            valign="top"
+        )
+
+        notice_row.add_widget(warning_icon)
+        notice_row.add_widget(warning_text)
+        notice_card.add_widget(notice_row)
+        content.add_widget(notice_card)
+
+        # Bottom padding (reduced)
+        content.add_widget(BoxLayout(size_hint_y=None, height=dp(10)))
+
         scroll.add_widget(content)
         layout.add_widget(scroll)
         self.add_widget(layout)
+
     
     def show_folder_picker(self, instance):
         """Show a clean, scrollable folder picker dialog"""

@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 fullscreen=0 
 # (str) Application versioning (method 1)
-version = 0.1
+version = 1.0
 
 # (list) Application requirements
 # CRITICAL: Added hostpython3 and fixed order
