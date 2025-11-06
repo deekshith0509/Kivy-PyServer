@@ -64,7 +64,7 @@ try:
     from kivymd.uix.label import MDIcon
 except ImportError:
     MDIcon = MDLabel
-
+ANDROID = False
 # Android-specific imports
 if kivy_platform == 'android':
     try:
@@ -938,18 +938,81 @@ class ServerManager:
         else:
             logger.log("[get_local_ip] Not running on Android (using socket fallback).")
 
-        # Fallback using socket UDP trick (works on most non-Android platforms)
+
+
+        def is_private(ip):
+            return bool(re.match(r"^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)", ip))
+
         try:
-            logger.log("[get_local_ip] Attempting socket-based fallback...")
+            logger.log("[get_local_ip] Trying socket-based detection (default route)...")
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
             s.close()
-            logger.log(f"[get_local_ip] ✅ Socket fallback IP resolved: {ip}")
-            return ip
+
+            if ip and not ip.startswith("127."):
+                logger.log(f"[get_local_ip] ✅ Primary IP via socket: {ip}")
+                return ip
         except Exception as e:
-            logger.log(f"[get_local_ip] Socket fallback failed: {e}")
-            return "127.0.0.1"
+            logger.log(f"[get_local_ip] Socket-based detection failed: {e}")
+
+        # --- Linux Path (strong local interface fallback)
+        try:
+            os_name = platform.system().lower()
+
+            if os_name == "linux":
+                try:
+                    logger.log("[get_local_ip] Using Linux 'hostname -I' fallback...")
+                    output = subprocess.check_output(["hostname", "-I"]).decode().strip()
+                    ips = [ip for ip in output.split() if ip and not ip.startswith("127.")]
+                    if ips:
+                        for ip in ips:
+                            if is_private(ip):
+                                logger.log(f"[get_local_ip] ✅ Found private LAN/Wi-Fi IP: {ip}")
+                                return ip
+                        logger.log(f"[get_local_ip] ⚠️ Non-private IP found: {ips[0]}")
+                        return ips[0]
+                except Exception as e:
+                    logger.log(f"[get_local_ip] hostname -I fallback failed: {e}")
+
+            elif os_name == "windows":
+                # --- Windows fallback: parse ipconfig if socket fails
+                try:
+                    logger.log("[get_local_ip] Using Windows 'ipconfig' fallback...")
+                    output = subprocess.check_output("ipconfig", shell=True, text=True, encoding='utf-8', errors='ignore')
+                    possible_ips = re.findall(r"IPv4 Address[^\:]*:\s*([\d\.]+)", output)
+                    for ip in possible_ips:
+                        if is_private(ip):
+                            logger.log(f"[get_local_ip] ✅ Found private LAN/Wi-Fi IP: {ip}")
+                            return ip
+                    if possible_ips:
+                        logger.log(f"[get_local_ip] ⚠️ Non-private IP found: {possible_ips[0]}")
+                        return possible_ips[0]
+                except Exception as e:
+                    logger.log(f"[get_local_ip] ipconfig fallback failed: {e}")
+
+            # --- Generic fallback if hostname maps to local interfaces
+            try:
+                hostname = socket.gethostname()
+                logger.log(f"[get_local_ip] Enumerating interfaces via hostname: {hostname}")
+                addrs = socket.getaddrinfo(hostname, None, socket.AF_INET)
+                all_ips = [a[4][0] for a in addrs if not a[4][0].startswith("127.")]
+                if all_ips:
+                    for ip in all_ips:
+                        if is_private(ip):
+                            logger.log(f"[get_local_ip] ✅ Found private IP from getaddrinfo: {ip}")
+                            return ip
+                    logger.log(f"[get_local_ip] ⚠️ Found non-private IP from getaddrinfo: {all_ips[0]}")
+                    return all_ips[0]
+            except Exception as e:
+                logger.log(f"[get_local_ip] getaddrinfo enumeration failed: {e}")
+
+        except Exception as e:
+            logger.log(f"[get_local_ip] OS-specific fallback failed: {e}")
+
+        # --- Last Resort
+        logger.log("[get_local_ip] ❌ All methods failed. Returning localhost (127.0.0.1)")
+        return "127.0.0.1"
 
     def debug_interfaces(self):
         """
